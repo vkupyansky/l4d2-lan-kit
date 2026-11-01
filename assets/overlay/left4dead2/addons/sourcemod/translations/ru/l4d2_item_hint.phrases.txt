@@ -1,0 +1,447 @@
+"Phrases"
+{
+	"Announce_Vocalize_ITEM (C)"
+	{
+		"#format"	"{1:N},{2:T}"
+		"ru"	"({green}Предмет{default}) {olive}{1}{default}: {2}"
+	}
+
+	"Announce_Vocalize_ITEM"
+	{
+		"#format"	"{1:N},{2:T}"
+		"ru"	"(Предмет) {1}: {2}"
+	}
+
+	"Announce_Vocalize_INFECTED (C)"
+	{
+		"#format"	"{1:N},{2:T}"
+		"ru"	"({green}Заражённый{default}) {olive}{1}{default}: {red}{2}"
+	}
+
+	"Announce_Vocalize_INFECTED"
+	{
+		"#format"	"{1:N},{2:T}"
+		"ru"	"(Заражённый) {1}: {2}"
+	}
+
+	"Announce_Vocalize_SURVIVOR (C)"
+	{
+		"#format"	"{1:N},{2:s}"
+		"ru"	"({green}Выживший{default}) {olive}{1}{default}: {Blue}{2}"
+	}
+
+	"Announce_Vocalize_SURVIVOR"
+	{
+		"#format"	"{1:N},{2:s}"
+		"ru"	"(Выживший) {1}: {2}"
+	}
+
+	"MARKED_SURVIVOR_BY (C)"
+	{
+		"#format"	"{1:N}"
+		"ru"	"[{green}Метка{default}] Вас отметил {olive}{1}"
+	}
+
+	"MARKED_SURVIVOR_BY"
+	{
+		"#format"	"{1:N}"
+		"ru"	"[Метка] Вас отметил {1}"
+	}
+
+	"Announce_Spot_Marker (C)"
+	{
+		"#format"	"{1:N}"
+		"ru"	"({green}Метка{default}) {olive}{1}{default} отметил место"
+	}
+
+	"Announce_Spot_Marker"
+	{
+		"#format"	"{1:N}"
+		"ru"	"(Метка) {1} отметил место"
+	}
+
+	"Spot_Maker"
+	{
+		"#format"	"{1:N}"
+		"ru"	"{1} отметил это место"
+	}
+
+	"Melee"
+	{
+		"ru"	"Оружие ближнего боя!"
+	}
+
+	"Weapons"
+	{
+		"ru"	"Оружие!"
+	}
+
+	"First_Aid_Kit"
+	{
+		"ru"	"Аптечка!"
+	}
+
+	"Defibrillator"
+	{
+		"ru"	"Дефибриллятор!"
+	}
+
+	"Pain_Pills"
+	{
+		"ru"	"Таблетки!"
+	}
+
+	"Adrenaline"
+	{
+		"ru"	"Адреналин!"
+	}
+
+	"Bile_Bomb"
+	{
+		"ru"	"Банка с желчью!"
+	}
+
+	"Molotov"
+	{
+		"ru"	"Коктейль Молотова!"
+	}
+
+	"Pipe_Bomb"
+	{
+		"ru"	"Самодельная бомба!"
+	}
+
+	"Laser_Sight"
+	{
+		"ru"	"Лазерный прицел!"
+	}
+
+	"Incendiary_UpgradePack"
+	{
+		"ru"	"Набор зажигательных патронов!"
+	}
+
+	"Explosive_UpgradePack"
+	{
+		"ru"	"Набор разрывных патронов!"
+	}
+
+	"Ammo"
+	{
+		"ru"	"Боеприпасы!"
+	}
+
+	"Chainsaw"
+	{
+		"ru"	"Бензопила!"
+	}
+
+	"Pistol"
+	{
+		"ru"	"Пистолет!"
+	}
+
+	"Magnum"
+	{
+		"ru"	"Магнум!"
+	}
+
+	"Pump_Shotgun"
+	{
+		"ru"	"Помповый дробовик!"
+	}
+
+	"Shotgun_Chrome"
+	{
+		"ru"	"Хромированный дробовик!"
+	}
+
+	"Uzi"
+	{
+		"ru"	"УЗИ!"
+	}
+
+	"Silenced_Smg"
+	{
+		"ru"	"Пистолет-пулемёт с глушителем!"
+	}
+
+	"MP5"
+	{
+		"ru"	"MP5!"
+	}
+
+	"Rifle"
+	{
+		"ru"	"Штурмовая винтовка!"
+	}
+
+	"SG552"
+	{
+		"ru"	"SG552!"
+	}
+
+	"AK47"
+	{
+		"ru"	"АК-47!"
+	}
+
+	"Desert_Rifle"
+	{
+		"ru"	"Винтовка SCAR!"
+	}
+
+	"Shotgun_Spas"
+	{
+		"ru"	"Дробовик SPAS-12!"
+	}
+
+	"Auto_Shotgun"
+	{
+		"ru"	"Автоматический дробовик!"
+	}
+
+	"Hunting_Rifle"
+	{
+		"ru"	"Охотничья винтовка!"
+	}
+
+	"Military_Sniper"
+	{
+		"ru"	"Военная снайперская винтовка!"
+	}
+
+	"Scout"
+	{
+		"ru"	"Scout!"
+	}
+
+	"AWP"
+	{
+		"ru"	"AWP!"
+	}
+
+	"Grenade_Launcher"
+	{
+		"ru"	"Гранатомёт!"
+	}
+
+	"M60"
+	{
+		"ru"	"Пулемёт M60!"
+	}
+
+	"Gas_Can"
+	{
+		"ru"	"Канистра с бензином!"
+	}
+
+	"Firework"
+	{
+		"ru"	"Коробка фейерверков!"
+	}
+
+	"Propane_Tank"
+	{
+		"ru"	"Баллон с пропаном!"
+	}
+
+	"Oxygen_Tank"
+	{
+		"ru"	"Кислородный баллон!"
+	}
+
+	"Gnome"
+	{
+		"ru"	"Гном!"
+	}
+
+	"Cola"
+	{
+		"ru"	"Кола!"
+	}
+
+	"50_Cal_Machine_Gun"
+	{
+		"ru"	"Стационарный пулемёт .50!"
+	}
+
+	"Minigun"
+	{
+		"ru"	"Миниган!"
+	}
+
+	"Explosive_Ammo"
+	{
+		"ru"	"Разрывные патроны!"
+	}
+
+	"Incendiary_Ammo"
+	{
+		"ru"	"Зажигательные патроны!"
+	}
+
+	"Knife"
+	{
+		"ru"	"Нож!"
+	}
+
+	"Baseball_Bat"
+	{
+		"ru"	"Бейсбольная бита!"
+	}
+
+	"Cricket_Bat"
+	{
+		"ru"	"Крикетная бита!"
+	}
+
+	"Crowbar"
+	{
+		"ru"	"Монтировка!"
+	}
+
+	"Electric_Guitar"
+	{
+		"ru"	"Электрогитара!"
+	}
+
+	"Fireaxe"
+	{
+		"ru"	"Пожарный топор!"
+	}
+
+	"Frying_Pan"
+	{
+		"ru"	"Сковорода!"
+	}
+
+	"Katana"
+	{
+		"ru"	"Катана!"
+	}
+
+	"Machete"
+	{
+		"ru"	"Мачете!"
+	}
+
+	"Nightstick"
+	{
+		"ru"	"Полицейская дубинка!"
+	}
+
+	"Golf_Club"
+	{
+		"ru"	"Клюшка для гольфа!"
+	}
+
+	"Pitchfork"
+	{
+		"ru"	"Вилы!"
+	}
+
+	"Shovel"
+	{
+		"ru"	"Лопата!"
+	}
+
+	"Boomer"
+	{
+		"ru"	"Толстяк!"
+	}
+
+	"Spitter"
+	{
+		"ru"	"Плевальщица!"
+	}
+
+	"Smoker"
+	{
+		"ru"	"Курильщик!"
+	}
+
+	"Hunter"
+	{
+		"ru"	"Охотник!"
+	}
+
+	"Jockey"
+	{
+		"ru"	"Жокей!"
+	}
+
+	"Charger"
+	{
+		"ru"	"Громила!"
+	}
+
+	"Tank"
+	{
+		"ru"	"Танк!"
+	}
+
+	"Witch"
+	{
+		"ru"	"Ведьма!"
+	}
+
+	"Witch_Bride"
+	{
+		"ru"	"Ведьма-невеста!"
+	}
+
+	"Unknown Infected"
+	{
+		"ru"	"Неизвестный заражённый"
+	}
+
+	"MARKED_SURVIVOR_BY_INFECTED (C)"
+	{
+		"#format"	"{1:N}"
+		"ru"	"[{green}Метка{default}] Вас отметил заражённый {red}{1}"
+	}
+
+	"MARKED_SURVIVOR_BY_INFECTED"
+	{
+		"#format"	"{1:N}"
+		"ru"	"[Метка] Вас отметил заражённый {1}"
+	}
+
+	"Announce_Infected_Mark_SURVIVOR (C)"
+	{
+		"#format"	"{1:N},{2:s}"
+		"ru"	"({green}Заражённый{default}) {green}{1}{default}: {Blue}{2}"
+	}
+
+	"Announce_Infected_Mark_SURVIVOR"
+	{
+		"#format"	"{1:N},{2:s}"
+		"ru"	"(Заражённый) {1}: {2}"
+	}
+
+	"Announce_Infected_Mark_ITEM (C)"
+	{
+		"#format"	"{1:N},{2:T}"
+		"ru"	"({green}Заражённый{default}) {green}{1}{default}: {2}"
+	}
+
+	"Announce_Infected_Mark_ITEM"
+	{
+		"#format"	"{1:N},{2:T}"
+		"ru"	"(Заражённый) {1}: {2}"
+	}
+
+	"Announce_Infected_Mark_SPOT (C)"
+	{
+		"#format"	"{1:N}"
+		"ru"	"({green}Заражённый{default}) {green}{1}{default} отметил место"
+	}
+
+	"Announce_Infected_Mark_SPOT"
+	{
+		"#format"	"{1:N}"
+		"ru"	"(Заражённый) {1} отметил место"
+	}
+}
+

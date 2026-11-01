@@ -1,0 +1,17 @@
+// Human-led coop; bots help and accept orders.
+automation = 0
+automation_autostart = 0
+scavenge_campaign_autostart = 0
+team_min_defibs = 1
+userlevel_orders = 0
+userlevel_give_medkit = 0
+userlevel_give_others = 0
+userlevel_give_weapons = 0
+manual_attack_always = 0
+manual_attack_mindot = 0.94
+manual_attack_saccade_speed = 350
+manual_attack_common_head_radius = 0
+manual_attack_special_head_radius = 0
+manual_attack_dual_pistol_nerf = 1
+manual_attack_wandering = 0
+bot_think_interval = 0.1

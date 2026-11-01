@@ -1,0 +1,279 @@
+{
+  "SchemaVersion": 1,
+  "Files": [
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/configs/missioncycle.coop.txt",
+      "Bytes": 191,
+      "Sha256": "84df59f3daf00c1268d996cad5f3cd8fcdc23b296e792d14077af40c167130ed"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/data/left4dhooks.l4d1.cfg",
+      "Bytes": 76229,
+      "Sha256": "c63e8228eb06bcad8ce4152e34a25b22206ab0d7ecc5032c7e21087a7b2b4b63"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/data/left4dhooks.l4d2.cfg",
+      "Bytes": 68761,
+      "Sha256": "fecbe6d63e7736a49f6fa721d91ac71537da6e6f78870359584ede5eed2a3451"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/gamedata/l4d2_item_hint.txt",
+      "Bytes": 230,
+      "Sha256": "379e650d1b890eb67035f74fffb24aa1f4713ca80dcea8a6552cdea6d64101af"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/gamedata/l4d_path_to_goal.txt",
+      "Bytes": 989,
+      "Sha256": "24200914ecb5497c920ef844e3bce471fcbb54738fb43558c3aae32fbc595b97"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/gamedata/l4d_use_priority.txt",
+      "Bytes": 1737,
+      "Sha256": "098d55b76d59d51e64a13dffbd40bd8c97ca49298e5578a0b4808f913bbd872f"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/gamedata/left4dhooks.l4d1.txt",
+      "Bytes": 126767,
+      "Sha256": "e21a3f4d29cc50841a402b4c6321487c849d9f0053b74e0fefd10bfaabca818d"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/gamedata/left4dhooks.l4d2.txt",
+      "Bytes": 206025,
+      "Sha256": "4318130583536fbfd9b6bc7b7c4ef30e38e609298168b892c059857d5007a288"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/gamedata/lux_library.txt",
+      "Bytes": 5222,
+      "Sha256": "e2a0ec91d808180063b26a04c97737ee3f756133668f9b30e972e61880c7e94e"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/gamedata/trigger_horde_notify.txt",
+      "Bytes": 708,
+      "Sha256": "999e3f381e5a8a819db84b8e5cdb19077a9bb8b5406d22d097eefa9f8405646e"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/gvazdas_navmesh_utils.inc",
+      "Bytes": 12301,
+      "Sha256": "4299278d05a24b6e458366a28752f571eb09e6d45f68137202060281a2135c85"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/gvazdas_random.inc",
+      "Bytes": 2367,
+      "Sha256": "acc7737888de5b0ad823af22678018c913392f6fd4eaedeea6cc9b170f98a108"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/l4d_drop.inc",
+      "Bytes": 693,
+      "Sha256": "991a94b7d11e0572434346fcb9dbc6811c8ef52b5dc21e33467919dc5d466b8f"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/l4d_path_to_goal.inc",
+      "Bytes": 124556,
+      "Sha256": "a414a05d27e6702bd1794d76afb51a318606443f7857bab62a2b464dfa298645"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/left4dhooks.inc",
+      "Bytes": 278016,
+      "Sha256": "7550c7c6e7a9e74998c335be2646889833a360a41cc0dc9f539309a7e5a203aa"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/left4dhooks_anim.inc",
+      "Bytes": 137188,
+      "Sha256": "28f00711e2b15ceece3277612740f70469e8f8b6094bb0d70dd173f2407c0711"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/left4dhooks_lux_library.inc",
+      "Bytes": 62049,
+      "Sha256": "1b9b4e8261ae57ab2eb67c218db78b85b6305f929f6e8c7d9704b28dce5f2dc8"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/left4dhooks_silver.inc",
+      "Bytes": 34730,
+      "Sha256": "4924b18636dbbf59a239435fe038f18dcefeea0ded8ad38af071fd1e0371d9e0"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/left4dhooks_stocks.inc",
+      "Bytes": 52720,
+      "Sha256": "a117afd841658f4d0b4b6ac3a4ed0304d90c8f31350ba1e9e6e40123c1a49cf1"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/multicolors/colors.inc",
+      "Bytes": 25956,
+      "Sha256": "91231e7a83bf1f4ebc936945bd23bcf86588dc623a8f9c9e1613bd0197356311"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/multicolors/morecolors.inc",
+      "Bytes": 34633,
+      "Sha256": "ec6ff9e286d7c5d2f584670a8bb94b819a941b240ba61669e3cb3ee07591ad5e"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/include/multicolors.inc",
+      "Bytes": 12009,
+      "Sha256": "b55d230921c1e55492a0eb2962b6543464905d39b21fe44ce90405778a64b954"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4d2_item_hint.sp",
+      "Bytes": 137027,
+      "Sha256": "674c57be5fa038a70ddf56520855af4533f58de0e874e1ef637ca601a5f4ffa0"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4d_drop.sp",
+      "Bytes": 13929,
+      "Sha256": "9d397af8f99c6532eb6a1f2b8b6cbb31ba1bea7863d83d78b9706ef0dd09f4df"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4d_path_to_goal.sp",
+      "Bytes": 31712,
+      "Sha256": "e82927aced38cc29f37eea0a5cd4e8a873ccf58a4df208be59c1db3e51cef2aa"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4d_use_priority.sp",
+      "Bytes": 6662,
+      "Sha256": "b3a416a193ece0412f62c2b0dae03dc2a7d78e2ef8ad9dc88b1b8a7adff90fa8"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4dd/l4dd_forwards.sp",
+      "Bytes": 237737,
+      "Sha256": "3a9561d4c2ba2ca3b69aded9b0840748a7e924f72586fa46d2b7dce5ca6fc18c"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4dd/l4dd_gamedata.sp",
+      "Bytes": 140593,
+      "Sha256": "4854cb35877fbea828e24275adc04dc20801ed63c9bd4d49ee296396e8825750"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4dd/l4dd_natives.sp",
+      "Bytes": 237631,
+      "Sha256": "bcc8d3c85b821ed79b912658e004efde6d656059a7b60ba543ecc62b6da815f5"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4dd/l4dd_setup.sp",
+      "Bytes": 66270,
+      "Sha256": "e7b62a1fe46460a9b9c9c9758f60497a4768006f49383476f9305d2908157ce7"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4dd/l4dd_targetfilters.sp",
+      "Bytes": 21387,
+      "Sha256": "586ebf12810c3e3ac0b39f8b1c0a5f63d3537d657547fded8d1f6823d2dff68b"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4dd/left4dhooks_changelog.txt",
+      "Bytes": 93651,
+      "Sha256": "521e53acf771dc918c2f853469ace20f9857e0c1997d328aeb374657eb2bed65"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/left4dhooks.sp",
+      "Bytes": 62644,
+      "Sha256": "45a303c72ad6f721db27b42cc7d4597d841a01375bb097ea95704c779c382bc8"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/scripting/trigger_horde_notify.sp",
+      "Bytes": 6502,
+      "Sha256": "26726ee635d557efac23bf0ae0b1af848faf1470ba2b7603b628af751a62c55c"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/translations/l4d2_item_hint.phrases.txt",
+      "Bytes": 13256,
+      "Sha256": "c4e1d14130b966df4cc5035e6c3bb53de2408d0c889048a35777fd3766fdeecf"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/translations/l4d_path_to_goal.phrases.txt",
+      "Bytes": 463,
+      "Sha256": "6bb39f887725bb3dd564a2fdc16f280ad1f387955149d2cb91adb5582ebf9cfa"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/translations/lt/l4d_path_to_goal.phrases.txt",
+      "Bytes": 513,
+      "Sha256": "4dea5f4ec233969dffdaae3d06f784b6875efb985696e2a2c47fdc5038628499"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/translations/ru/l4d2_item_hint.phrases.txt",
+      "Bytes": 5948,
+      "Sha256": "7a008189c57af6937617319dc77eb062a191a1fa44c754be2f84ffed72aea4cb"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/translations/ru/l4d_path_to_goal.phrases.txt",
+      "Bytes": 785,
+      "Sha256": "9308e983d142910098a4fd28f06503752566b61c5be9ac2da86632080e5accc3"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/addons/sourcemod/translations/trigger_horde_notify.phrases.txt",
+      "Bytes": 1292,
+      "Sha256": "2d49f8cc2fa106f294052c49d8b04c5e5887db3e3ad4347dc3aac241374da5b3"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/cfg/sourcemod/acs.cfg",
+      "Bytes": 258,
+      "Sha256": "78fb30bbf173fb8d0dc6714b4ff574b5e9a5d2ab2b0d0beecff427adfac29f96"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/cfg/sourcemod/l4d2_item_hint.cfg",
+      "Bytes": 284,
+      "Sha256": "6be63c2869b4af3a683c314e551e35bd5c32ed6514ddfa110a6fe5a66dfa9b9f"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/cfg/sourcemod/l4d_drop.cfg",
+      "Bytes": 202,
+      "Sha256": "00693cfc9ae8785aa76f19010cc368bb86d89be42164ccfc8051b50eaa642874"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/cfg/sourcemod/l4d_path_to_goal.cfg",
+      "Bytes": 388,
+      "Sha256": "9d4a79151969441e2c76024594c7454c1778cd93c4b12875f700d6c13cb5aeb6"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/ems/left4bots2/cfg/settings.txt",
+      "Bytes": 490,
+      "Sha256": "c68ea025e0c6cb8e7f735469b5439c228e97209c7e99da22633932d62a1e1fd6"
+    },
+    {
+      "Path": "assets/overlay/left4dead2/scripts/vscripts/left4bots_afterinit.nut",
+      "Bytes": 145,
+      "Sha256": "349cfdf1f12bdc8acb110378f8d783f46e36d7196eab745a516d70fda65e9165"
+    },
+    {
+      "Path": "templates/lan-kit.cfg",
+      "Bytes": 725,
+      "Sha256": "14bb43894e7d7a71d84bfc10f9a66727745f7dcc5172e3b82b10d963af3e792d"
+    },
+    {
+      "Path": "templates/server.cfg",
+      "Bytes": 148,
+      "Sha256": "de817d8eb79cd4af34237932c1d846b9af0e6b3a0c4e5ff048d790f452ab6822"
+    },
+    {
+      "Path": "licenses/GPL-3.0.txt",
+      "Bytes": 35149,
+      "Sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "Path": "config.example.json",
+      "Bytes": 229,
+      "Sha256": "b698dd47cbc1b1261b70e226b8463141967e4b9fdbfc4dccaaf561526019283f"
+    },
+    {
+      "Path": "metadata/dependencies.json",
+      "Bytes": 5430,
+      "Sha256": "bb8156a57d219bdcab71fda8aa1f6d82af38dc17406d0d1890ab7c4458670987"
+    }
+  ],
+  "LocalChanges": [
+    {
+      "Date": "2026-11-01",
+      "Paths": [
+        "assets/overlay/left4dead2/addons/sourcemod/translations/ru/l4d2_item_hint.phrases.txt",
+        "assets/overlay/left4dead2/addons/sourcemod/translations/ru/l4d_path_to_goal.phrases.txt"
+      ],
+      "Change": "Russian translations; phrase keys and placeholders preserved.",
+      "License": "GPL-3.0-or-later"
+    },
+    {
+      "Date": "2026-11-01",
+      "Paths": [
+        "assets/overlay/left4dead2/addons/sourcemod/scripting/include/left4dhooks.inc"
+      ],
+      "Change": "Comment terminology only; executable logic unchanged.",
+      "License": "GPL-3.0-only"
+    }
+  ]
+}

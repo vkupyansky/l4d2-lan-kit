@@ -1,0 +1,15 @@
+/runtime/
+/kit.config.json
+*.partial
+*.log
+__pycache__/
+.DS_Store
+*.exe
+*.dll
+*.smx
+*.vpk
+*.bsp
+*.dem
+*.dmp
+*.mdmp
+*.zip

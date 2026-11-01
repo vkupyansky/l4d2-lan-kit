@@ -1,0 +1,3628 @@
+//fdxx, BHaType	@ 2021
+//Harry @ 2022-2026
+
+
+#pragma semicolon 1
+#pragma newdecls required
+
+#include <sdkhooks>
+#include <sdktools>
+#include <sourcemod>
+#include <multicolors>
+#include <left4dhooks>
+#undef REQUIRE_PLUGIN
+#tryinclude <LMCCore> //https://github.com/fbef0102/L4D1_2-Plugins/blob/master/Luxs-Model-Changer
+
+#if !defined _LMCCore_included
+	native int LMC_GetClientOverlayModel(int iClient);
+#endif
+
+public Plugin myinfo =
+{
+	name        = "L4D2 Item hint",
+	author      = "BHaType, fdxx, HarryPotter",
+	description = "Use !mark or 'Look' in vocalize menu, print corresponding item to chat area and make item glow or create spot marker/infeced maker",
+	version     = "5.5-2026/10/25",
+	url         = "https://github.com/fbef0102/L4D1_2-Plugins/tree/master/l4d2_item_hint"
+};
+
+bool bLate, g_bL4D2Version;
+int ZC_TANK;
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+{
+	EngineVersion test = GetEngineVersion();
+
+	if( test == Engine_Left4Dead )
+	{
+		g_bL4D2Version = false;
+		ZC_TANK = 5;
+	}
+	else if( test == Engine_Left4Dead2 )
+	{
+		g_bL4D2Version = true;
+		ZC_TANK = 8;
+	}
+	else
+	{
+		strcopy(error, err_max, "Plugin only supports Left 4 Dead 1 & 2.");
+		return APLRes_SilentFailure;
+	}
+
+	MarkNativeAsOptional("LMC_GetClientOverlayModel");
+
+	RegPluginLibrary("l4d2_item_hint");
+
+	bLate = late;
+	return APLRes_Success;
+}
+
+#define MAXENTITIES 2048
+#define MODEL_MARK_FIELD 	"materials/sprites/laserbeam.vmt"
+#define CLASSNAME_INFO_TARGET         "info_target"
+#define CLASSNAME_ENV_SPRITE          "env_sprite"
+#define ENTITY_WORLDSPAWN             0
+#define ENTITY_SAFE_LIMIT 2000
+#define L4D2_BEAM_LIFE_MIN 0.1
+#define DIRECTION_OUT 0
+#define DIRECTION_IN 1
+
+#define ZC_SMOKER		1
+#define ZC_BOOMER		2
+#define ZC_HUNTER		3
+#define ZC_SPITTER		4
+#define ZC_JOCKEY		5
+#define ZC_CHARGER		6
+
+#define SF_PHYSPROP_PREVENT_PICKUP		(1 << 9)
+#define EFL_DONTBLOCKLOS		(1 << 25)
+
+#define MODEL_PAINPILLS               "models/w_models/weapons/w_eq_painpills.mdl"
+
+ConVar g_hCvarCMDEnable, g_hHintTransType, g_hSurvivorTeamVocalizeEnable, 
+	g_hSurvivorTeamButtons, g_hSurvivorTeamAliveMark, g_hSurvivorTeamIncapMark, g_hSurvivorTeamHaningMark, g_hSurvivorTeamCappedMark, g_hSurvivorTeamDeadMark,
+	g_hItemHintCoolDown, g_hInfectedMarkCoolDown, g_hSurvivorMarkCoolDown,
+	g_hItemUseHintRange, g_hItemUseSound, g_hItemAnnounceType, g_hItemGlowTimer, g_hItemGlowRange, g_hItemCvarColor,
+	g_hItemInstructorHint, g_hItemInstructorColor, g_hItemInstructorIcon, g_hItemRemovePrevious,
+	g_hItemMarkGlowEnable,
+	g_hSpotMarkRingCvarColor, g_hSpotMarkCoolDown, g_hSpotMarkUseRange, g_hSpotMarkUseSound, g_hSpotMarkAnnounceType, g_hSpotMarkSpriteColor, g_hSpotMarkTimer, g_hSpotMarkSpriteModel, g_hSpotMarkSpriteHeight, g_hSpotMarkSpriteScale,
+	g_hSpotMarkInstructorHint, g_hSpotMarkInstructorColor, g_hSpotMarkInstructorIcon,
+	g_hSpotMarkRingStartRadius, g_hSpotMarkRingEndRadius, g_hSpotMarkRingWidth, g_hSpotMarkParticle, g_hSpotMarkRemovePrevious,
+	g_hInfectedMarkType, g_hInfectedMarkUseRange, g_hInfectedMarkUseSound, g_hInfectedMarkAnnounceType, g_hInfectedMarkGlowTimer, g_hInfectedMarkGlowRange, g_hInfectedMarkGlowColor, g_hInfectedMarkSpriteColor, g_hInfectedMarkSIFlag,
+	g_hInfectedMarkInstructorHint, g_hInfectedMarkInstructorColor, g_hInfectedMarkInstructorIcon,
+	g_hInfectedMarkSIFov, g_hInfectedMarkWitchFov, g_hInfectedMarkRemovePrevious,
+	g_hInfectedMarkSpriteModel, g_hInfectedMarkSpriteTimer, g_hInfectedMarkSpriteScale, g_hInfectedMarkSpriteFollow,
+	g_hSurvivorMarkUseRange, g_hSurvivorMarkUseSound, g_hSurvivorMarkAnnounceType, g_hSurvivorMarkGlowTimer, g_hSurvivorMarkGlowRange, g_hSurvivorMarkSpriteColor, g_hSurvivorMarkType, g_hSurvivorMarkGlowColor,
+	g_hSurvivorMarkInstructorHint, g_hSurvivorMarkInstructorColor, g_hSurvivorMarkInstructorIcon,
+	g_hSurvivorMarkFov, g_hSurvivorMarkRemovePrevious,
+	g_hSurvivorMarkInfectedNotify,
+	g_hSurvivorMarkSpriteModel, g_hSurvivorMarkSpriteTimer, g_hSurvivorMarkSpriteScale, g_hSurvivorMarkSpriteFollow,
+	g_hInfectedTeamMarkEnable, g_hInfectedTeamButtons, g_hInfectedTeamAliveMark, g_hInfectedTeamDeadMark, g_hInfectedTeamGhostMark;
+
+int g_iHintTransType,
+	g_iSurvivorTeamButtons, g_iSurvivorTeamAliveMark, g_iSurvivorTeamIncapMark, g_iSurvivorTeamHaningMark, g_iSurvivorTeamCappedMark, g_iSurvivorTeamDeadMark,
+	g_iItemAnnounceType, g_iItemGlowRange, g_iItemCvarColor,
+	g_iSpotMarkCvarColorArray[3], g_iSpotMarkAnnounceType,
+	g_iInfectedMarkType, g_iInfectedMarkAnnounceType, g_iInfectedMarkGlowRange, g_iInfectedMarkGlowColor, g_iInfectedMarkSIFlag,
+	g_iSurvivorMarkAnnounceType, g_iSurvivorMarkGlowRange, g_iSurvivorMarkType, g_iSurvivorMarkGlowColor,
+	g_iInfectedTeamButtons, g_iInfectedTeamAliveMark, g_iInfectedTeamDeadMark, g_iInfectedTeamGhostMark;
+
+float g_fItemHintCoolDown, g_fSpotMarkCoolDown, g_fInfectedMarkCoolDown, g_fSurvivorMarkCoolDown,
+	g_fItemUseHintRange, g_fItemGlowTimer,
+	g_fSpotMarkUseRange, g_fSpotMarkTimer, g_fSpotMarkSpriteHeight, g_fSpotMarkSpriteScale,
+	g_fSpotMarkRingStartRadius, g_fSpotMarkRingEndRadius, g_fSpotMarkRingWidth,
+	g_fInfectedMarkUseRange, g_fInfectedMarkGlowTimer, g_fInfectedMarkSIFov, g_fInfectedMarkWitchFov,
+	g_fInfectedMarkSpriteTimer, g_fInfectedMarkSpriteScale,
+	g_fSurvivorMarkUseRange, g_fSurvivorMarkGlowTimer, g_fSurvivorMarkFov,
+	g_fSurvivorMarkSpriteTimer, g_fSurvivorMarkSpriteScale;
+
+char g_sItemInstructorColor[12], g_sItemInstructorIcon[16], g_sSpotMarkRingCvarColor[12], g_sSpotMarkSpriteColor[12], g_sItemUseSound[100],
+	g_sSpotMarkUseSound[100], g_sSpotMarkInstructorColor[12], g_sSpotMarkInstructorIcon[16], g_sSpotMarkSpriteModel[PLATFORM_MAX_PATH], g_sSpotMarkParticle[PLATFORM_MAX_PATH],
+	g_sInfectedMarkUseSound[100], g_sInfectedMarkGlowColor[12], g_sInfectedMarkSpriteColor[12], g_sInfectedMarkInstructorColor[12], g_sInfectedMarkInstructorIcon[16],
+	g_sInfectedMarkSpriteModel[PLATFORM_MAX_PATH],
+	g_sSurvivorMarkUseSound[100], g_sSurvivorMarkGlowColor[12], g_sSurvivorMarkSpriteColor[12], g_sSurvivorMarkInstructorColor[12], g_sSurvivorMarkInstructorIcon[16],
+	g_sSurvivorMarkSpriteModel[PLATFORM_MAX_PATH];
+
+bool g_bCvarCMDEnable, g_bItemInstructorHint, 
+	g_bSurvivorTeamVocalizeEnable,
+	g_bItemMarkGlowEnable, g_bItemRemovePrevious,
+	g_bSpotMarkInstructorHint, g_bSpotMarkRemovePrevious,
+	g_bInfectedMarkInstructorHint, g_bInfectedMarkSpriteFollow, g_bInfectedMarkRemovePrevious,
+	g_bSurvivorMarkInstructorHint, g_bSurvivorMarkSpriteFollow, g_bSurvivorMarkRemovePrevious, g_bSurvivorMarkInfectedNotify,
+	g_bInfectedTeamMarkEnable;
+
+float       
+	g_fGlobalCoolDownTime[MAXPLAYERS + 1],
+	g_fItemHintCoolDownTime[MAXPLAYERS + 1],
+	g_fSpotMarkCoolDownTime[MAXPLAYERS + 1], 
+	g_fInfectedMarkCoolDownTime[MAXPLAYERS + 1], 
+	g_fSurvivorMarkCoolDownTime[MAXPLAYERS + 1],
+	g_fSpotMarkerRingStartTime[MAXPLAYERS + 1];
+
+
+bool   
+	ge_bMoveUp[MAXENTITIES+1],
+	ge_bInvalidTrace[MAXENTITIES+1],
+	g_bMapStarted;
+
+int
+	g_iModelIndex[MAXENTITIES+1][2], //兩個隊伍
+	g_iInstructorIndex[MAXENTITIES+1][2], //兩個隊伍
+	g_iInfoTargetIndex[MAXENTITIES+1][2], //兩個隊伍
+	g_iMarkerTeam[MAXENTITIES+1],
+	g_iEntCreator[MAXENTITIES+1],
+	g_iMarkedByMultiPlayer_Flag[MAXENTITIES+1][2], //兩個隊伍
+	g_iZombieClass,
+	g_iClientMarkItem_EntRef[MAXPLAYERS + 1] = {-1, ...},
+	g_iClientMarkSpot_SpriteInfoTargetEntRef[MAXPLAYERS + 1] = {-1, ...},
+	g_iClient_InfoTargetEntRef[MAXPLAYERS + 1] = {-1, ...},
+	g_iClient_InstructorHintEntRef[MAXPLAYERS + 1] = {-1, ...},
+	g_iClientMarkInf_PlayerAndWitch[MAXPLAYERS + 1] = {-1, ...},
+	g_iClientMarkSur_Player[MAXPLAYERS + 1] = {-1, ...};
+
+Handle  
+	g_iModelTimer[MAXENTITIES+1][2], //兩個隊伍
+	g_iInstructorTimer[MAXENTITIES+1][2], //兩個隊伍
+	g_iInfoTargetTimer[MAXENTITIES+1][2], //兩個隊伍
+	g_hUseEntity;
+
+StringMap 
+	g_smModelToName,
+	g_smModelHeight,
+	g_smModelNotGlow;
+
+enum EHintType 
+{
+	eItemHint,
+	eSpotMarker,
+	eInfectedMaker,
+	eSurvivorMaker,
+}
+
+enum /*EMarkFlag*/
+{
+	eMarkFlag_None 				= 0,
+	eMarkFlag_SI 				= (1 << 0),
+	eMarkFlag_Witch 			= (1 << 1),
+	eMarkFlag_Survivors 		= (1 << 2),
+	eMarkFlag_ItemsWeapons 		= (1 << 3),
+	eMarkFlag_Spots 			= (1 << 4),
+}
+
+public void OnPluginStart()
+{
+	LoadTranslations("l4d2_item_hint.phrases");
+
+	GameData hGameData = new GameData("l4d2_item_hint");
+	if (hGameData != null)
+	{
+		int iOffset = hGameData.GetOffset("FindUseEntity");
+		if (iOffset != -1)
+		{
+			// https://forums.alliedmods.net/showpost.php?p=2753773&postcount=2
+			StartPrepSDKCall(SDKCall_Player);
+			PrepSDKCall_SetVirtual(iOffset);
+			PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);
+			PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);
+			PrepSDKCall_AddParameter(SDKType_Float, SDKPass_Plain);
+			PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
+			PrepSDKCall_AddParameter(SDKType_Bool, SDKPass_Plain);
+			PrepSDKCall_SetReturnInfo(SDKType_CBaseEntity, SDKPass_Pointer);
+			g_hUseEntity = EndPrepSDKCall();
+		}
+		else SetFailState("Failed to load offset");
+	}
+	else SetFailState("Failed to load l4d2_item_hint.txt file");
+	delete hGameData;
+
+	// g_hItemUseHintRange = FindConVar("player_use_radius");
+	AddCommandListener(Vocalize_Listener, "vocalize");
+
+	g_iZombieClass = FindSendPropInfo("CTerrorPlayer", "m_zombieClass");
+
+	// general
+	g_hCvarCMDEnable					= CreateConVar("l4d2_item_hint_cmd", 							"1", 					"If 1, Survivors can type !mark to mark targets", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_hHintTransType					= CreateConVar("l4d2_item_hint_instructorhint_translate", 		"0", 					"Instructor hint language. 0=Server language (English), 1=Caller language", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+
+	// survivor
+	g_hSurvivorTeamVocalizeEnable 		= CreateConVar("l4d2_item_hint_sur_vocalize", 					"1", 					"If 1, Survivors can use vocalize \"Look\" to mark targets", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_hSurvivorTeamButtons				= CreateConVar("l4d2_item_hint_sur_buttons", 					"131104", 				"Survivors press which buttons to mark targets, 131072=Shift, 4=Ctrl, 32=Use, 8192=Reload, 524288=Middle Mouse\nYou can add numbers together, ex. 131104=Shift + Use (0=off)", FCVAR_NOTIFY, true, 0.0);
+	g_hSurvivorTeamAliveMark			= CreateConVar("l4d2_item_hint_sur_alive_mark", 				"31", 					"Standing Survivors can mark, 1=S.I., 2=Witch, 4=Survivors, 8=Items/Weapons, 16=Spots (Add numbers togethoer, 31=All)", FCVAR_NOTIFY, true, 0.0, true, 31.0);
+	g_hSurvivorTeamIncapMark			= CreateConVar("l4d2_item_hint_sur_incap_mark", 				"19", 					"Incapped Survivors can mark, 1=S.I., 2=Witch, 4=Survivors, 8=Items/Weapons, 16=Spots (Add numbers togethoer, 31=All)", FCVAR_NOTIFY, true, 0.0, true, 31.0);
+	g_hSurvivorTeamHaningMark			= CreateConVar("l4d2_item_hint_sur_hanging_mark", 				"16", 					"Survivors Hanging from ledge can mark, 1=S.I., 2=Witch, 4=Survivors, 8=Items/Weapons, 16=Spots (Add numbers togethoer, 31=All)", FCVAR_NOTIFY, true, 0.0, true, 31.0);
+	g_hSurvivorTeamCappedMark			= CreateConVar("l4d2_item_hint_sur_capped_mark", 				"1", 					"Pinned Survivors can mark, 1=S.I., 2=Witch, 4=Survivors, 8=Items/Weapons, 16=Spots (Add numbers togethoer, 31=All)", FCVAR_NOTIFY, true, 0.0, true, 31.0);
+	g_hSurvivorTeamDeadMark				= CreateConVar("l4d2_item_hint_sur_dead_mark", 					"16", 					"Dead Survivors can mark, 1=S.I., 2=Witch, 4=Survivors, 8=Items/Weapons, 16=Spots (Add numbers togethoer, 31=All)", FCVAR_NOTIFY, true, 0.0, true, 31.0);
+	
+	// infected
+	g_hInfectedTeamMarkEnable			= CreateConVar("l4d2_item_hint_inf_team_mark_enable",			"1",					"If 1, infected players can use mark", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_hInfectedTeamButtons				= CreateConVar("l4d2_item_hint_inf_team_mark_buttons", 			"131072", 				"Infected players press which buttons to mark targets, 131072=Shift, 4=Ctrl, 32=Use, 8192=Reload, 524288=Middle Mouse\nYou can add numbers together, ex. 131104=Shift + Use (0=off)", FCVAR_NOTIFY, true, 0.0);
+	g_hInfectedTeamAliveMark			= CreateConVar("l4d2_item_hint_inf_alive_mark", 				"20", 					"Alive infected players can mark, 4=Survivors, 8=Items/Weapons, 16=Spots (Add numbers togethoer, 28=All)", FCVAR_NOTIFY, true, 0.0, true, 28.0);
+	g_hInfectedTeamDeadMark				= CreateConVar("l4d2_item_hint_inf_dead_mark", 					"20", 					"Dead infected players can mark, 4=Survivors, 8=Items/Weapons, 16=Spots (Add numbers togethoer, 28=All)", FCVAR_NOTIFY, true, 0.0, true, 28.0);
+	g_hInfectedTeamGhostMark			= CreateConVar("l4d2_item_hint_inf_ghost_mark", 				"20", 					"Ghost infected players can mark, 4=Survivors, 8=Items/Weapons, 16=Spots (Add numbers togethoer, 28=All)", FCVAR_NOTIFY, true, 0.0, true, 28.0);
+
+	// spot mark
+	g_hSpotMarkRingCvarColor			= CreateConVar("l4d2_spot_marker_circle_color", 				"200 200 200", 			"Spot marker beam ring color (RGB, space-separated). Empty = Remove beam ring", FCVAR_NOTIFY);
+	g_hSpotMarkCoolDown					= CreateConVar("l4d2_spot_marker_cooldown_time", 				"0.25", 				"Cooldown between spot marks (seconds)", FCVAR_NOTIFY, true, 0.0);
+	g_hSpotMarkUseRange     			= CreateConVar("l4d2_spot_marker_use_range", 					"1800", 				"Max distance to place a spot marker", FCVAR_NOTIFY, true, 1.0);
+	g_hSpotMarkUseSound     			= CreateConVar("l4d2_spot_marker_use_sound", 					"buttons/blip1.wav", 	"Sound when placing a spot marker. (relative to sound/, Empty = Off)", FCVAR_NOTIFY);
+	g_hSpotMarkAnnounceType				= CreateConVar("l4d2_spot_marker_announce_type", 				"1", 					"Spot marker announce type: 0=Off, 1=Chat, 2=Hint text, 3=Center text", FCVAR_NOTIFY, true, 0.0, true, 3.0);
+	g_hSpotMarkTimer					= CreateConVar("l4d2_spot_marker_duration", 					"50.0", 				"Spot marker duration (seconds)", FCVAR_NOTIFY, true, 0.0);
+	g_hSpotMarkSpriteColor      		= CreateConVar("l4d2_spot_marker_sprite_color", 				"200 200 200", 			"Spot marker icon color (RGB, space-separated). (Empty = Remove icon)");
+	g_hSpotMarkSpriteModel      		= CreateConVar("l4d2_spot_marker_sprite_model", 				"materials/vgui/icon_arrow_down.vmt", "Spot marker icon model.");
+	g_hSpotMarkSpriteHeight      		= CreateConVar("l4d2_spot_marker_sprite_height", 				"10.0", 				"Spot marker icon height from ground", FCVAR_NOTIFY, true, 0.0);
+	g_hSpotMarkSpriteScale      		= CreateConVar("l4d2_spot_marker_sprite_scale", 				"0.5", 					"Spot marker icon size", FCVAR_NOTIFY, true, 0.0);
+	if(g_bL4D2Version)
+	{
+		g_hSpotMarkInstructorHint		= CreateConVar("l4d2_spot_marker_instructorhint_enable", 		"1", 					"(L4D2) If 1, show instructor hint on spot marker", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+		g_hSpotMarkInstructorColor		= CreateConVar("l4d2_spot_marker_instructorhint_color", 		"200 200 200", 			"(L4D2) Instructor hint color on spot marker. (Empty = hide text)", FCVAR_NOTIFY);
+		g_hSpotMarkInstructorIcon		= CreateConVar("l4d2_spot_marker_instructorhint_icon", 			"icon_info", 			"(L4D2) Instructor hint icon on spot marker", FCVAR_NOTIFY);
+	}	
+	g_hSpotMarkRingStartRadius			= CreateConVar("l4d2_spot_marker_ring_start_radius", 			"35.0", 				"Spot marker beam ring starting radius", FCVAR_NOTIFY, true, 1.0);
+	g_hSpotMarkRingEndRadius			= CreateConVar("l4d2_spot_marker_ring_end_radius", 				"50.0", 				"Spot marker beam ring ending radius", FCVAR_NOTIFY, true, 1.0);
+	g_hSpotMarkRingWidth				= CreateConVar("l4d2_spot_marker_ring_width", 					"2.0", 					"Spot marker beam ring width", FCVAR_NOTIFY, true, 0.0);
+	g_hSpotMarkParticle					= CreateConVar("l4d2_spot_marker_particle", 					"", 					"Particle effect on spot marker. (e.g., sline_sparks) \nEmpty = Off, more: https://forums.alliedmods.net/showthread.php?t=127111", FCVAR_NOTIFY); //sline_sparks
+	g_hSpotMarkRemovePrevious			= CreateConVar("l4d2_spot_marker_remove_previous", 				"1", 					"If 1, Remove previous spot marker if same player marks again", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+
+	// item/weapon mark
+	if(g_bL4D2Version)
+	{
+		g_hItemCvarColor				= CreateConVar("l4d2_item_marker_glow_color", 					"0 255 255", 			"(L4D2) Item marker glow color (RGB, space-separated). Empty = Remove Glow", FCVAR_NOTIFY);
+	}
+	else
+	{
+		g_hItemMarkGlowEnable			= CreateConVar("l4d2_item_marker_glow_enable", 					"1", 					"(L4D1) If 1, Enable white glow when mark items", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	}
+	g_hItemGlowTimer					= CreateConVar("l4d2_item_marker_glow_timer", 					"10.0", 				"Item marker glow duration (seconds)", FCVAR_NOTIFY, true, 0.0);
+	g_hItemGlowRange					= CreateConVar("l4d2_item_marker_glow_range", 					"800", 					"Item marker glow visible range", FCVAR_NOTIFY, true, 0.0);
+	g_hItemHintCoolDown					= CreateConVar("l4d2_item_marker_cooldown_time", 				"1.0", 					"Cooldown between marking items (seconds)", FCVAR_NOTIFY, true, 0.0);
+	g_hItemUseHintRange					= CreateConVar("l4d2_item_marker_use_range", 					"150", 					"Max distance to mark an item", FCVAR_NOTIFY, true, 1.0);
+	g_hItemUseSound						= CreateConVar("l4d2_item_marker_use_sound", 					"buttons/blip1.wav", 	"Sound when marking an item. (relative to sound/, Empty = Off)", FCVAR_NOTIFY);
+	g_hItemAnnounceType					= CreateConVar("l4d2_item_marker_announce_type", 				"1", 					"Item marker announce type: 0=Off, 1=Chat, 2=Hint text, 3=Center text", FCVAR_NOTIFY, true, 0.0, true, 3.0);
+	if(g_bL4D2Version)
+	{
+		g_hItemInstructorHint			= CreateConVar("l4d2_item_marker_instructorhint_enable", 		"1", 					"(L4D2) If 1, show instructor hint on marked items", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+		g_hItemInstructorColor			= CreateConVar("l4d2_item_marker_instructorhint_color", 		"0 255 255", 			"(L4D2) Instructor hint color on items. (Empty = hide item name)", FCVAR_NOTIFY);
+		g_hItemInstructorIcon			= CreateConVar("l4d2_item_marker_instructorhint_icon", 			"icon_interact", 		"(L4D2) Instructor hint icon. (More icons: https://developer.valvesoftware.com/wiki/Env_instructor_hint)", FCVAR_NOTIFY);
+	}	
+	g_hItemRemovePrevious				= CreateConVar("l4d2_item_marker_remove_previous", 				"0", 					"If 1, Remove previous Item marker if same player marks again", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+
+	// S.I./Witch mark
+	g_hInfectedMarkType   				= CreateConVar("l4d2_infected_marker_type", 					"0",					"S.I./Witch marker type, 0=(L4D2) Body Glow, 1=Sprite icon above head", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	if(g_bL4D2Version)
+	{
+		g_hInfectedMarkGlowColor   		= CreateConVar("l4d2_infected_marker_glow_color", 				"255 120 203",			"(L4D2) S.I./Witch marker glow color (RGB, space-separated). Empty = Remove Glow.", FCVAR_NOTIFY);
+		g_hInfectedMarkGlowTimer   		= CreateConVar("l4d2_infected_marker_glow_timer", 				"10.0", 				"(L4D2) S.I./Witch glow duration when marked by Survivors (seconds)", FCVAR_NOTIFY, true, 0.0);
+		g_hInfectedMarkGlowRange   		= CreateConVar("l4d2_infected_marker_glow_range", 				"2500", 				"(L4D2) S.I./Witch glow visible range when marked by Survivors", FCVAR_NOTIFY, true, 0.0);
+	}
+	g_hInfectedMarkSpriteColor   		= CreateConVar("l4d2_infected_marker_sprite_color", 			"255 0 0",				"S.I./Witch marker icon color (RGB, space-separated). Empty = Off.", FCVAR_NOTIFY);
+	g_hInfectedMarkSpriteModel      	= CreateConVar("l4d2_infected_marker_sprite_model", 			"materials/vgui/icon_arrow_down.vmt", "S.I./Witch marker icon model.", FCVAR_NOTIFY);
+	g_hInfectedMarkSpriteTimer   		= CreateConVar("l4d2_infected_marker_sprite_timer", 			"10.0", 				"S.I./Witch marker icon duration when marked by Survivors (seconds)", FCVAR_NOTIFY, true, 0.0);
+	g_hInfectedMarkSpriteScale      	= CreateConVar("l4d2_infected_marker_sprite_scale", 			"0.3", 					"S.I./Witch marker icon size", FCVAR_NOTIFY, true, 0.0);
+	g_hInfectedMarkSpriteFollow			= CreateConVar("l4d2_infected_marker_sprite_follow_target", 	"1", 					"If 1, S.I./Witch marker icon will follow target", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_hInfectedMarkCoolDown				= CreateConVar("l4d2_infected_marker_cooldown_time", 			"0.25", 				"Cooldown for Survivors marking S.I./Witch (seconds)", FCVAR_NOTIFY, true, 0.0);
+	g_hInfectedMarkUseRange     		= CreateConVar("l4d2_infected_marker_use_range", 				"1000", 				"Max distance for Survivors to mark S.I./Witch", FCVAR_NOTIFY, true, 1.0);
+	g_hInfectedMarkUseSound				= CreateConVar("l4d2_infected_marker_use_sound", 				"items/suitchargeok1.wav", "Sound when Survivors mark S.I./Witch (relative to sound/, Empty = Off)", FCVAR_NOTIFY);
+	g_hInfectedMarkAnnounceType			= CreateConVar("l4d2_infected_marker_announce_type",			"1", 					"S.I./Witch marker announce type: 0=Off, 1=Chat, 2=Hint text, 3=Center text", FCVAR_NOTIFY, true, 0.0, true, 3.0);
+	g_hInfectedMarkSIFlag    			= CreateConVar("l4d2_infected_marker_si_flag", 					"127", 					"Which S.I. can Survivors mark? 1=Smoker, 2=Boomer, 4=Hunter, 8=Spitter, 16=Jockey, 32=Charger, 64=Tank. Add together (127=All)", FCVAR_NOTIFY, true, 0.0, true, 127.0);
+	if(g_bL4D2Version)
+	{
+		g_hInfectedMarkInstructorHint	= CreateConVar("l4d2_infected_marker_instructorhint_enable", 	"1", 					"(L4D2) If 1, show instructor hint on S.I./Witch marked by Survivors", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+		g_hInfectedMarkInstructorColor	= CreateConVar("l4d2_infected_marker_instructorhint_color", 	"255 0 0", 				"(L4D2) Instructor hint color on S.I./Witch marker (Empty = hide S.I./Witch name)", FCVAR_NOTIFY);
+		g_hInfectedMarkInstructorIcon	= CreateConVar("l4d2_infected_marker_instructorhint_icon", 		"icon_skull", 			"(L4D2) Instructor hint icon on S.I./Witch marker", FCVAR_NOTIFY);
+	}
+	g_hInfectedMarkSIFov				= CreateConVar("l4d2_infected_marker_si_fov", 					"15.0", 				"FOV angle to detect if Survivor is looking at S.I. (0=Crosshair only)", FCVAR_NOTIFY, true, 0.0, true, 90.0);
+	g_hInfectedMarkWitchFov				= CreateConVar("l4d2_infected_marker_witch_fov", 				"15.0", 				"FOV angle to detect if Survivor is looking at Witch. (0=Crosshair only)", FCVAR_NOTIFY, true, 0.0, true, 90.0);
+	g_hInfectedMarkRemovePrevious		= CreateConVar("l4d2_infected_marker_remove_previous", 			"1", 					"If 1, Remove previous S.I./Witch marker if same player marks again", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+
+	// Survivor mark
+	g_hSurvivorMarkType   				= CreateConVar("l4d2_survivor_marker_type", 					"0",					"Survivor marker type, 0=(L4D2) Body Glow, 1=Sprite icon above head", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	if(g_bL4D2Version)
+	{
+		g_hSurvivorMarkGlowColor   		= CreateConVar("l4d2_survivor_marker_glow_color", 				"0 200 0", 				"(L4D2) Survivor marker glow color (RGB, space-separated). Empty = Off.", FCVAR_NOTIFY);
+		g_hSurvivorMarkGlowTimer   		= CreateConVar("l4d2_survivor_marker_glow_timer", 				"10.0", 				"(L4D2) Survivor marker glow duration when marked (seconds)", FCVAR_NOTIFY, true, 0.0);
+		g_hSurvivorMarkGlowRange   		= CreateConVar("l4d2_survivor_marker_glow_range", 				"2000", 				"(L4D2) Survivor marker glow visible range when marked", FCVAR_NOTIFY, true, 0.0);
+	}
+	g_hSurvivorMarkSpriteColor   	= CreateConVar("l4d2_survivor_marker_sprite_color", 				"0 200 0", 				"Survivor marker icon color (RGB, space-separated). Empty = Off.", FCVAR_NOTIFY);
+	g_hSurvivorMarkSpriteModel      = CreateConVar("l4d2_survivor_marker_sprite_model", 				"materials/vgui/icon_arrow_down.vmt", "Survivor marker icon model", FCVAR_NOTIFY);
+	g_hSurvivorMarkSpriteTimer   	= CreateConVar("l4d2_survivor_marker_sprite_timer", 				"10.0", 				"Survivor marker icon duration", FCVAR_NOTIFY, true, 0.0);
+	g_hSurvivorMarkSpriteScale      = CreateConVar("l4d2_survivor_marker_sprite_scale", 				"0.35", 				"Survivor marker icon size", FCVAR_NOTIFY, true, 0.0);
+	g_hSurvivorMarkSpriteFollow		= CreateConVar("l4d2_survivor_marker_sprite_follow_target", 		"1", 					"If 1, Survivor marker icon will follow target", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_hSurvivorMarkCoolDown			= CreateConVar("l4d2_survivor_marker_cooldown_time", 				"0.25", 				"Cooldown between marking survivors (seconds)", FCVAR_NOTIFY, true, 0.0);
+	g_hSurvivorMarkUseRange     	= CreateConVar("l4d2_survivor_marker_use_range", 					"1000", 				"Max distance to mark a survivor", FCVAR_NOTIFY, true, 1.0);
+	g_hSurvivorMarkUseSound			= CreateConVar("l4d2_survivor_marker_use_sound", 					"player/suit_denydevice.wav",  "Sound when marking a survivor. (relative to sound/, Empty = Off)", FCVAR_NOTIFY);
+	g_hSurvivorMarkAnnounceType		= CreateConVar("l4d2_survivor_marker_announce_type", 				"1", 					"Announce type when marking a survivor: 0=Off, 1=Chat, 2=Hint text, 3=Center text", FCVAR_NOTIFY, true, 0.0, true, 3.0);
+	if(g_bL4D2Version)
+	{
+		g_hSurvivorMarkInstructorHint	= CreateConVar("l4d2_survivor_marker_instructorhint_enable", 	"1", 					"(L4D2) If 1, show instructor hint on marked survivor", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+		g_hSurvivorMarkInstructorColor	= CreateConVar("l4d2_survivor_marker_instructorhint_color", 	"0 200 0", 				"(L4D2) Instructor hint color on survivor marker. (Empty = hide name)", FCVAR_NOTIFY);
+		g_hSurvivorMarkInstructorIcon	= CreateConVar("l4d2_survivor_marker_instructorhint_icon", 		"icon_alert", 			"(L4D2) Instructor hint icon on survivor marker", FCVAR_NOTIFY);
+	}
+	g_hSurvivorMarkFov				= CreateConVar("l4d2_survivor_marker_fov", 							"15.0", 				"FOV angle to detect if player is looking at a survivor. (0=Crosshair only)", FCVAR_NOTIFY, true, 0.0, true, 90.0);
+	g_hSurvivorMarkRemovePrevious	= CreateConVar("l4d2_survivor_marker_remove_previous", 				"1", 					"If 1, Remove previous survivor marker if same player marks again", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+	g_hSurvivorMarkInfectedNotify	= CreateConVar("l4d2_survivor_marker_infected_notify",				"0",					"If 1, Notify that you are marked by an infected", FCVAR_NOTIFY, true, 0.0, true, 1.0);
+
+	AutoExecConfig(true, "l4d2_item_hint");
+
+	GetCvars();
+	g_hCvarCMDEnable.AddChangeHook(ConVarChanged_Cvars);
+	g_hHintTransType.AddChangeHook(ConVarChanged_Cvars);
+
+	g_hSurvivorTeamVocalizeEnable.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorTeamButtons.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorTeamAliveMark.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorTeamIncapMark.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorTeamHaningMark.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorTeamCappedMark.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorTeamDeadMark.AddChangeHook(ConVarChanged_Cvars);
+
+	g_hInfectedTeamMarkEnable.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedTeamButtons.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedTeamAliveMark.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedTeamDeadMark.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedTeamGhostMark.AddChangeHook(ConVarChanged_Cvars);
+
+	g_hSpotMarkRingCvarColor.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkCoolDown.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkUseRange.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkUseSound.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkAnnounceType.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkTimer.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkSpriteColor.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkSpriteModel.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkSpriteHeight.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkSpriteScale.AddChangeHook(ConVarChanged_Cvars);
+	if(g_bL4D2Version)
+	{
+		g_hSpotMarkInstructorHint.AddChangeHook(ConVarChanged_Cvars);
+		g_hSpotMarkInstructorColor.AddChangeHook(ConVarChanged_Cvars);
+		g_hSpotMarkInstructorIcon.AddChangeHook(ConVarChanged_Cvars);
+	}
+	g_hSpotMarkRingStartRadius.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkRingEndRadius.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkRingWidth.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkParticle.AddChangeHook(ConVarChanged_Cvars);
+	g_hSpotMarkRemovePrevious.AddChangeHook(ConVarChanged_Cvars);
+
+	if(g_bL4D2Version)
+	{
+		g_hItemCvarColor.AddChangeHook(ConVarChanged_Cvars);
+	}
+	else
+	{
+		g_hItemMarkGlowEnable.AddChangeHook(ConVarChanged_Cvars);
+	}
+	g_hItemGlowTimer.AddChangeHook(ConVarChanged_Cvars);
+	g_hItemGlowRange.AddChangeHook(ConVarChanged_Cvars);
+	g_hItemHintCoolDown.AddChangeHook(ConVarChanged_Cvars);
+	g_hItemUseHintRange.AddChangeHook(ConVarChanged_Cvars);
+	g_hItemUseSound.AddChangeHook(ConVarChanged_Cvars);
+	g_hItemAnnounceType.AddChangeHook(ConVarChanged_Cvars);
+	if(g_bL4D2Version)
+	{
+		g_hItemInstructorHint.AddChangeHook(ConVarChanged_Cvars);
+		g_hItemInstructorColor.AddChangeHook(ConVarChanged_Cvars);
+		g_hItemInstructorIcon.AddChangeHook(ConVarChanged_Cvars);
+	}	
+	g_hItemRemovePrevious.AddChangeHook(ConVarChanged_Cvars);
+
+	g_hInfectedMarkType.AddChangeHook(ConVarChanged_Cvars);
+	if(g_bL4D2Version)
+	{
+		g_hInfectedMarkGlowColor.AddChangeHook(ConVarChanged_Cvars);
+		g_hInfectedMarkGlowTimer.AddChangeHook(ConVarChanged_Cvars);
+		g_hInfectedMarkGlowRange.AddChangeHook(ConVarChanged_Cvars);
+	}
+	g_hInfectedMarkSpriteColor.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkSpriteModel.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkSpriteTimer.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkSpriteScale.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkSpriteFollow.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkCoolDown.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkUseRange.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkUseSound.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkAnnounceType.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkSIFlag.AddChangeHook(ConVarChanged_Cvars);
+	if(g_bL4D2Version)
+	{
+		g_hInfectedMarkInstructorHint.AddChangeHook(ConVarChanged_Cvars);
+		g_hInfectedMarkInstructorColor.AddChangeHook(ConVarChanged_Cvars);
+		g_hInfectedMarkInstructorIcon.AddChangeHook(ConVarChanged_Cvars);
+	}
+	g_hInfectedMarkSIFov.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkWitchFov.AddChangeHook(ConVarChanged_Cvars);
+	g_hInfectedMarkRemovePrevious.AddChangeHook(ConVarChanged_Cvars);
+
+	// Survivor mark
+	g_hSurvivorMarkType.AddChangeHook(ConVarChanged_Cvars);
+	if(g_bL4D2Version)
+	{
+		g_hSurvivorMarkGlowColor.AddChangeHook(ConVarChanged_Cvars);
+		g_hSurvivorMarkGlowTimer.AddChangeHook(ConVarChanged_Cvars);
+		g_hSurvivorMarkGlowRange.AddChangeHook(ConVarChanged_Cvars);
+	}
+	g_hSurvivorMarkSpriteColor.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkSpriteModel.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkSpriteTimer.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkSpriteScale.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkSpriteFollow.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkCoolDown.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkUseRange.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkUseSound.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkAnnounceType.AddChangeHook(ConVarChanged_Cvars);
+	if(g_bL4D2Version)
+	{
+		g_hSurvivorMarkInstructorHint.AddChangeHook(ConVarChanged_Cvars);
+		g_hSurvivorMarkInstructorColor.AddChangeHook(ConVarChanged_Cvars);
+		g_hSurvivorMarkInstructorIcon.AddChangeHook(ConVarChanged_Cvars);
+	}
+	g_hSurvivorMarkFov.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkRemovePrevious.AddChangeHook(ConVarChanged_Cvars);
+	g_hSurvivorMarkInfectedNotify.AddChangeHook(ConVarChanged_Cvars);
+
+	RegConsoleCmd("sm_mark", CMD_MARK, "Mark item/infected/spot. Both Team players can use this cmd");
+	RegConsoleCmd("sm_ping", CMD_MARK, "Mark item/infected/spot. Both Team players can use this cmd");
+
+	HookEvent("round_start", Event_RoundStart);
+	HookEvent("round_end", Event_Round_End);
+	HookEvent("map_transition", Event_Round_End);         //戰役過關到下一關的時候 (沒有觸發round_end)
+	HookEvent("mission_lost", Event_Round_End);           //戰役滅團重來該關卡的時候 (之後有觸發round_end)
+	HookEvent("finale_win", Event_Round_End);
+	HookEvent("spawner_give_item", Event_SpawnerGiveItem);
+	HookEvent("player_spawn", Event_PlayerSpawn);
+	HookEvent("player_team", Event_PlayerTeam);
+	HookEvent("player_death", Event_PlayerDeath);
+	HookEvent("witch_killed", Event_WitchKilled);
+
+	CreateStringMap();
+
+	if (bLate)
+	{
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			if (IsClientInGame(i))
+			{
+				OnClientPutInServer(i);
+				OnClientPostAdminCheck(i);
+			}
+		}
+
+		char classname[21];
+		int entity;
+
+		classname = "prop_minigun_l4d1";
+		entity = INVALID_ENT_REFERENCE;
+		while ((entity = FindEntityByClassname(entity, classname)) != INVALID_ENT_REFERENCE)
+		{
+			if(!IsValidEntity(entity)) continue;
+			
+			SDKHook(entity, SDKHook_UsePost, OnUse);
+		}
+
+		classname = "prop_minigun";
+		entity = INVALID_ENT_REFERENCE;
+		while ((entity = FindEntityByClassname(entity, classname)) != INVALID_ENT_REFERENCE)
+		{
+			if(!IsValidEntity(entity)) continue;
+			
+			SDKHook(entity, SDKHook_UsePost, OnUse);
+		}
+	}
+}
+
+public void OnPluginEnd()
+{
+	RemoveAllGlow_Timer();
+	RemoveAllSpotMark();
+}
+
+bool bLMC_Available;
+public void OnAllPluginsLoaded()
+{
+	// Use Priority Patch
+	if( FindConVar("l4d_use_priority_version") == null )
+	{
+		LogMessage("\n==========\nWarning: You should install \"[L4D & L4D2] Use Priority Patch\" to fix attached models blocking +USE action (item hint): https://forums.alliedmods.net/showthread.php?t=327511\n==========\n");
+	}
+
+	bLMC_Available = LibraryExists("LMCCore");
+}
+
+public void OnLibraryAdded(const char[] sName)
+{
+	bLMC_Available = LibraryExists("LMCCore");
+}
+
+public void OnLibraryRemoved(const char[] sName)
+{
+	bLMC_Available = LibraryExists("LMCCore");
+}
+
+void ConVarChanged_Cvars(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	GetCvars();
+}
+
+void GetCvars()
+{
+	char sColor[16];
+
+	g_bCvarCMDEnable = g_hCvarCMDEnable.BoolValue;
+	g_iHintTransType = g_hHintTransType.IntValue;
+
+	g_bSurvivorTeamVocalizeEnable = g_hSurvivorTeamVocalizeEnable.BoolValue;
+	g_iSurvivorTeamButtons = g_hSurvivorTeamButtons.IntValue;
+	g_iSurvivorTeamAliveMark = g_hSurvivorTeamAliveMark.IntValue;
+	g_iSurvivorTeamIncapMark = g_hSurvivorTeamIncapMark.IntValue;
+	g_iSurvivorTeamHaningMark = g_hSurvivorTeamHaningMark.IntValue;
+	g_iSurvivorTeamCappedMark = g_hSurvivorTeamCappedMark.IntValue;
+	g_iSurvivorTeamDeadMark = g_hSurvivorTeamDeadMark.IntValue;
+
+	g_bInfectedTeamMarkEnable = g_hInfectedTeamMarkEnable.BoolValue;
+	g_iInfectedTeamButtons = g_hInfectedTeamButtons.IntValue;
+	g_iInfectedTeamAliveMark = g_hInfectedTeamAliveMark.IntValue;
+	g_iInfectedTeamDeadMark = g_hInfectedTeamDeadMark.IntValue;
+	g_iInfectedTeamGhostMark = g_hInfectedTeamGhostMark.IntValue;
+
+	g_hSpotMarkRingCvarColor.GetString(g_sSpotMarkRingCvarColor, sizeof(g_sSpotMarkRingCvarColor));
+	TrimString(g_sSpotMarkRingCvarColor);
+	g_iSpotMarkCvarColorArray = ConvertRGBToIntArray(g_sSpotMarkRingCvarColor);
+	g_fSpotMarkCoolDown = g_hSpotMarkCoolDown.FloatValue;
+	g_fSpotMarkUseRange = g_hSpotMarkUseRange.FloatValue;
+	g_hSpotMarkUseSound.GetString(g_sSpotMarkUseSound, sizeof(g_sSpotMarkUseSound));
+	if (strlen(g_sSpotMarkUseSound) > 0 && g_bMapStarted) PrecacheSound(g_sSpotMarkUseSound);
+	g_iSpotMarkAnnounceType = g_hSpotMarkAnnounceType.IntValue;
+	g_fSpotMarkTimer = g_hSpotMarkTimer.FloatValue;
+	g_hSpotMarkSpriteColor.GetString(g_sSpotMarkSpriteColor, sizeof g_sSpotMarkSpriteColor);
+	g_hSpotMarkSpriteModel.GetString(g_sSpotMarkSpriteModel, sizeof(g_sSpotMarkSpriteModel));
+	TrimString(g_sSpotMarkSpriteModel);
+	if ( strlen(g_sSpotMarkSpriteModel) > 0 && g_bMapStarted) PrecacheModel(g_sSpotMarkSpriteModel, true);
+	g_fSpotMarkSpriteHeight = g_hSpotMarkSpriteHeight.FloatValue;
+	g_fSpotMarkSpriteScale = g_hSpotMarkSpriteScale.FloatValue;
+	if(g_bL4D2Version)
+	{
+		g_bSpotMarkInstructorHint = g_hSpotMarkInstructorHint.BoolValue;
+		g_hSpotMarkInstructorColor.GetString(g_sSpotMarkInstructorColor, sizeof(g_sSpotMarkInstructorColor));
+		TrimString(g_sSpotMarkInstructorColor);
+		g_hSpotMarkInstructorIcon.GetString(g_sSpotMarkInstructorIcon, sizeof(g_sSpotMarkInstructorIcon));
+	}
+	g_fSpotMarkRingStartRadius = g_hSpotMarkRingStartRadius.FloatValue;
+	g_fSpotMarkRingEndRadius = g_hSpotMarkRingEndRadius.FloatValue;
+	g_fSpotMarkRingWidth = g_hSpotMarkRingWidth.FloatValue;
+	g_hSpotMarkParticle.GetString(g_sSpotMarkParticle, sizeof(g_sSpotMarkParticle));
+	if ( strlen(g_sSpotMarkParticle) > 0 && g_bMapStarted) PrecacheParticle(g_sSpotMarkParticle);
+	g_bSpotMarkRemovePrevious = g_hSpotMarkRemovePrevious.BoolValue;
+
+	if(g_bL4D2Version)
+	{
+		g_hItemCvarColor.GetString(sColor, sizeof(sColor));
+		g_iItemCvarColor 	= GetColor(sColor);
+	}
+	else
+	{
+		g_bItemMarkGlowEnable = g_hItemMarkGlowEnable.BoolValue;
+	}
+	g_fItemGlowTimer    = g_hItemGlowTimer.FloatValue;
+	g_iItemGlowRange 	= g_hItemGlowRange.IntValue;
+	g_fItemHintCoolDown = g_hItemHintCoolDown.FloatValue;
+	g_fItemUseHintRange = g_hItemUseHintRange.FloatValue;
+	g_hItemUseSound.GetString(g_sItemUseSound, sizeof(g_sItemUseSound));
+	if (strlen(g_sItemUseSound) > 0 && g_bMapStarted) PrecacheSound(g_sItemUseSound);
+	g_iItemAnnounceType = g_hItemAnnounceType.IntValue;
+	if(g_bL4D2Version)
+	{
+		g_bItemInstructorHint = g_hItemInstructorHint.BoolValue;
+		g_hItemInstructorColor.GetString(g_sItemInstructorColor, sizeof(g_sItemInstructorColor));
+		TrimString(g_sItemInstructorColor);
+		g_hItemInstructorIcon.GetString(g_sItemInstructorIcon, sizeof(g_sItemInstructorIcon));
+	}
+	g_bItemRemovePrevious = g_hItemRemovePrevious.BoolValue;
+	
+	g_iInfectedMarkType = g_hInfectedMarkType.IntValue;
+	if(g_bL4D2Version)
+	{
+		g_hInfectedMarkGlowColor.GetString(g_sInfectedMarkGlowColor, sizeof(g_sInfectedMarkGlowColor));
+		g_iInfectedMarkGlowColor = GetColor(g_sInfectedMarkGlowColor);
+		g_fInfectedMarkGlowTimer = g_hInfectedMarkGlowTimer.FloatValue;
+		g_iInfectedMarkGlowRange = g_hInfectedMarkGlowRange.IntValue;
+	}
+	g_hInfectedMarkSpriteColor.GetString(g_sInfectedMarkSpriteColor, sizeof(g_sInfectedMarkSpriteColor));
+	g_hInfectedMarkSpriteModel.GetString(g_sInfectedMarkSpriteModel, sizeof(g_sInfectedMarkSpriteModel));
+	g_fInfectedMarkSpriteTimer = g_hInfectedMarkSpriteTimer.FloatValue;
+	g_fInfectedMarkSpriteScale = g_hInfectedMarkSpriteScale.FloatValue;
+	g_bInfectedMarkSpriteFollow = g_hInfectedMarkSpriteFollow.BoolValue;
+	g_fInfectedMarkCoolDown = g_hInfectedMarkCoolDown.FloatValue;
+	g_fInfectedMarkUseRange = g_hInfectedMarkUseRange.FloatValue;
+	g_hInfectedMarkUseSound.GetString(g_sInfectedMarkUseSound, sizeof(g_sInfectedMarkUseSound));
+	if (strlen(g_sInfectedMarkUseSound) > 0 && g_bMapStarted) PrecacheSound(g_sInfectedMarkUseSound);
+	g_iInfectedMarkAnnounceType = g_hInfectedMarkAnnounceType.IntValue;
+	g_iInfectedMarkSIFlag = g_hInfectedMarkSIFlag.IntValue;
+	if(g_bL4D2Version)
+	{
+		g_bInfectedMarkInstructorHint = g_hInfectedMarkInstructorHint.BoolValue;
+		g_hInfectedMarkInstructorColor.GetString(g_sInfectedMarkInstructorColor, sizeof(g_sInfectedMarkInstructorColor));
+		g_hInfectedMarkInstructorIcon.GetString(g_sInfectedMarkInstructorIcon, sizeof(g_sInfectedMarkInstructorIcon));
+	}
+	g_fInfectedMarkSIFov = g_hInfectedMarkSIFov.FloatValue;
+	g_fInfectedMarkWitchFov = g_hInfectedMarkWitchFov.FloatValue;
+	g_bInfectedMarkRemovePrevious = g_hInfectedMarkRemovePrevious.BoolValue;
+
+	g_iSurvivorMarkType = g_hSurvivorMarkType.IntValue;
+	if(g_bL4D2Version)
+	{
+		g_hSurvivorMarkGlowColor.GetString(g_sSurvivorMarkGlowColor, sizeof(g_sSurvivorMarkGlowColor));
+		g_iSurvivorMarkGlowColor = GetColor(g_sSurvivorMarkGlowColor);
+		g_fSurvivorMarkGlowTimer = g_hSurvivorMarkGlowTimer.FloatValue;
+		g_iSurvivorMarkGlowRange = g_hSurvivorMarkGlowRange.IntValue;
+	}
+	g_hSurvivorMarkSpriteColor.GetString(g_sSurvivorMarkSpriteColor, sizeof(g_sSurvivorMarkSpriteColor));
+	g_hSurvivorMarkSpriteModel.GetString(g_sSurvivorMarkSpriteModel, sizeof(g_sSurvivorMarkSpriteModel));
+	g_fSurvivorMarkSpriteTimer = g_hSurvivorMarkSpriteTimer.FloatValue;
+	g_fSurvivorMarkSpriteScale = g_hSurvivorMarkSpriteScale.FloatValue;
+	g_bSurvivorMarkSpriteFollow = g_hSurvivorMarkSpriteFollow.BoolValue;	
+	g_fSurvivorMarkCoolDown = g_hSurvivorMarkCoolDown.FloatValue;
+	g_fSurvivorMarkUseRange = g_hSurvivorMarkUseRange.FloatValue;
+	g_hSurvivorMarkUseSound.GetString(g_sSurvivorMarkUseSound, sizeof(g_sSurvivorMarkUseSound));
+	if (strlen(g_sSurvivorMarkUseSound) > 0 && g_bMapStarted) PrecacheSound(g_sSurvivorMarkUseSound);
+	g_iSurvivorMarkAnnounceType = g_hSurvivorMarkAnnounceType.IntValue;
+	if(g_bL4D2Version)
+	{
+		g_bSurvivorMarkInstructorHint = g_hSurvivorMarkInstructorHint.BoolValue;
+		g_hSurvivorMarkInstructorColor.GetString(g_sSurvivorMarkInstructorColor, sizeof(g_sSurvivorMarkInstructorColor));
+		g_hSurvivorMarkInstructorIcon.GetString(g_sSurvivorMarkInstructorIcon, sizeof(g_sSurvivorMarkInstructorIcon));
+	}
+	g_fSurvivorMarkFov = g_hSurvivorMarkFov.FloatValue;
+	g_bSurvivorMarkRemovePrevious = g_hSurvivorMarkRemovePrevious.BoolValue;
+	g_bSurvivorMarkInfectedNotify = g_hSurvivorMarkInfectedNotify.BoolValue;
+}
+
+void CreateStringMap()
+{
+	g_smModelToName = new StringMap();
+
+	// Case-sensitive
+	g_smModelToName.SetString("models/w_models/weapons/w_eq_medkit.mdl", "First_Aid_Kit");
+	g_smModelToName.SetString("models/w_models/weapons/w_eq_defibrillator.mdl", "Defibrillator");
+	g_smModelToName.SetString("models/w_models/weapons/w_eq_painpills.mdl", "Pain_Pills");
+	g_smModelToName.SetString("models/w_models/weapons/w_eq_adrenaline.mdl", "Adrenaline");
+	g_smModelToName.SetString("models/w_models/weapons/w_eq_bile_flask.mdl", "Bile_Bomb");
+	g_smModelToName.SetString("models/w_models/weapons/w_eq_molotov.mdl", "Molotov");
+	g_smModelToName.SetString("models/w_models/weapons/w_eq_pipebomb.mdl", "Pipe_Bomb");
+	g_smModelToName.SetString("models/w_models/weapons/w_laser_sights.mdl", "Laser_Sight");
+	g_smModelToName.SetString("models/w_models/weapons/w_eq_incendiary_ammopack.mdl", "Incendiary_UpgradePack");
+	g_smModelToName.SetString("models/w_models/weapons/w_eq_explosive_ammopack.mdl", "Explosive_UpgradePack");
+	g_smModelToName.SetString("models/props/terror/ammo_stack.mdl", "Ammo");
+	g_smModelToName.SetString("models/props_unique/spawn_apartment/coffeeammo.mdl", "Ammo");
+	g_smModelToName.SetString("models/props/de_prodigy/ammo_can_02.mdl", "Ammo");
+	g_smModelToName.SetString("models/weapons/melee/w_chainsaw.mdl", "Chainsaw");
+	g_smModelToName.SetString("models/w_models/weapons/w_pistol_b.mdl", "Pistol");
+	g_smModelToName.SetString("models/w_models/weapons/w_pistol_a.mdl", "Pistol");
+	g_smModelToName.SetString("models/w_models/weapons/w_desert_eagle.mdl", "Magnum");
+	g_smModelToName.SetString("models/w_models/weapons/w_shotgun.mdl", "Pump_Shotgun");
+	g_smModelToName.SetString("models/w_models/weapons/w_pumpshotgun_a.mdl", "Shotgun_Chrome");
+	g_smModelToName.SetString("models/w_models/weapons/w_smg_uzi.mdl", "Uzi");
+	g_smModelToName.SetString("models/w_models/weapons/w_smg_a.mdl", "Silenced_Smg");
+	g_smModelToName.SetString("models/w_models/weapons/w_smg_mp5.mdl", "MP5");
+	g_smModelToName.SetString("models/w_models/weapons/w_rifle_m16a2.mdl", "Rifle");
+	g_smModelToName.SetString("models/w_models/weapons/w_rifle_sg552.mdl", "SG552");
+	g_smModelToName.SetString("models/w_models/weapons/w_rifle_ak47.mdl", "AK47");
+	g_smModelToName.SetString("models/w_models/weapons/w_desert_rifle.mdl", "Desert_Rifle");
+	g_smModelToName.SetString("models/w_models/weapons/w_shotgun_spas.mdl", "Shotgun_Spas");
+	g_smModelToName.SetString("models/w_models/weapons/w_autoshot_m4super.mdl", "Auto_Shotgun");
+	g_smModelToName.SetString("models/w_models/weapons/w_sniper_mini14.mdl", "Hunting_Rifle");
+	g_smModelToName.SetString("models/w_models/weapons/w_sniper_military.mdl", "Military_Sniper");
+	g_smModelToName.SetString("models/w_models/weapons/w_sniper_scout.mdl", "Scout");
+	g_smModelToName.SetString("models/w_models/weapons/w_sniper_awp.mdl", "AWP");
+	g_smModelToName.SetString("models/w_models/weapons/w_grenade_launcher.mdl", "Grenade_Launcher");
+	g_smModelToName.SetString("models/w_models/weapons/w_m60.mdl", "M60");
+	g_smModelToName.SetString("models/props_junk/gascan001a.mdl", "Gas_Can");
+	g_smModelToName.SetString("models/props_junk/explosive_box001.mdl", "Firework");
+	g_smModelToName.SetString("models/props_junk/propanecanister001a.mdl", "Propane_Tank");
+	g_smModelToName.SetString("models/props_equipment/oxygentank01.mdl", "Oxygen_Tank");
+	g_smModelToName.SetString("models/props_junk/gnome.mdl", "Gnome");
+	g_smModelToName.SetString("models/w_models/weapons/w_cola.mdl", "Cola");
+	g_smModelToName.SetString("models/w_models/weapons/50cal.mdl", "50_Cal_Machine_Gun");
+	g_smModelToName.SetString("models/w_models/weapons/w_minigun.mdl", "Minigun");
+	g_smModelToName.SetString("models/props/terror/exploding_ammo.mdl", "Explosive_Ammo");
+	g_smModelToName.SetString("models/props/terror/incendiary_ammo.mdl", "Incendiary_Ammo");
+	g_smModelToName.SetString("models/w_models/weapons/w_knife_t.mdl", "Knife");
+	g_smModelToName.SetString("models/weapons/melee/w_bat.mdl", "Baseball_Bat");
+	g_smModelToName.SetString("models/weapons/melee/w_cricket_bat.mdl", "Cricket_Bat");
+	g_smModelToName.SetString("models/weapons/melee/w_crowbar.mdl", "Crowbar");
+	g_smModelToName.SetString("models/weapons/melee/w_electric_guitar.mdl", "Electric_Guitar");
+	g_smModelToName.SetString("models/weapons/melee/w_fireaxe.mdl", "Fireaxe");
+	g_smModelToName.SetString("models/weapons/melee/w_frying_pan.mdl", "Frying_Pan");
+	g_smModelToName.SetString("models/weapons/melee/w_katana.mdl", "Katana");
+	g_smModelToName.SetString("models/weapons/melee/w_machete.mdl", "Machete");
+	g_smModelToName.SetString("models/weapons/melee/w_tonfa.mdl", "Nightstick");
+	g_smModelToName.SetString("models/weapons/melee/w_golfclub.mdl", "Golf_Club");
+	g_smModelToName.SetString("models/weapons/melee/w_pitchfork.mdl", "Pitchfork");
+	g_smModelToName.SetString("models/weapons/melee/w_shovel.mdl", "Shovel");
+	g_smModelToName.SetString("models/infected/boomette.mdl", "Boomer");
+	g_smModelToName.SetString("models/infected/boomer.mdl", "Boomer");
+	g_smModelToName.SetString("models/infected/boomer_l4d1.mdl", "Boomer");
+	g_smModelToName.SetString("models/infected/hulk.mdl", "Tank");
+	g_smModelToName.SetString("models/infected/hulk_l4d1.mdl", "Tank");
+	g_smModelToName.SetString("models/infected/hulk_dlc3.mdl", "Tank");
+	g_smModelToName.SetString("models/infected/smoker.mdl", "Smoker");
+	g_smModelToName.SetString("models/infected/smoker_l4d1.mdl", "Smoker");
+	g_smModelToName.SetString("models/infected/hunter.mdl", "Hunter");
+	g_smModelToName.SetString("models/infected/hunter_l4d1.mdl", "Hunter");
+	g_smModelToName.SetString("models/infected/witch.mdl", "Witch");
+	g_smModelToName.SetString("models/infected/witch_bride.mdl", "Witch_Bride");
+	g_smModelToName.SetString("models/infected/spitter.mdl", "Spitter");
+	g_smModelToName.SetString("models/infected/jockey.mdl", "Jockey");
+	g_smModelToName.SetString("models/infected/charger.mdl", "Charger");
+
+	g_smModelHeight = new StringMap();
+
+	// Case-sensitive
+	g_smModelHeight.SetValue("models/w_models/weapons/w_eq_medkit.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_eq_defibrillator.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_eq_painpills.mdl", 5.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_eq_adrenaline.mdl", 5.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_eq_bile_flask.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_eq_molotov.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_eq_pipebomb.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_laser_sights.mdl", 18.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_eq_incendiary_ammopack.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_eq_explosive_ammopack.mdl", 10.0);
+	g_smModelHeight.SetValue("models/props/terror/ammo_stack.mdl", 5.0);
+	g_smModelHeight.SetValue("models/props_unique/spawn_apartment/coffeeammo.mdl", 15.0);
+	g_smModelHeight.SetValue("models/props/de_prodigy/ammo_can_02.mdl", 10.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_chainsaw.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_pistol_b.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_pistol_a.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_desert_eagle.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_shotgun.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_pumpshotgun_a.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_smg_uzi.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_smg_a.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_smg_mp5.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_rifle_m16a2.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_rifle_sg552.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_rifle_ak47.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_desert_rifle.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_shotgun_spas.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_autoshot_m4super.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_sniper_mini14.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_sniper_military.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_sniper_scout.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_sniper_awp.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_grenade_launcher.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_m60.mdl", 10.0);
+	g_smModelHeight.SetValue("models/props_junk/gascan001a.mdl", 5.0);
+	g_smModelHeight.SetValue("models/props_junk/explosive_box001.mdl", 5.0);
+	g_smModelHeight.SetValue("models/props_junk/propanecanister001a.mdl", 5.0);
+	g_smModelHeight.SetValue("models/props_equipment/oxygentank01.mdl", 5.0);
+	g_smModelHeight.SetValue("models/props_junk/gnome.mdl", 10.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_cola.mdl", 5.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/50cal.mdl", 55.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_minigun.mdl", 55.0);
+	g_smModelHeight.SetValue("models/props/terror/exploding_ammo.mdl", 15.0);
+	g_smModelHeight.SetValue("models/props/terror/incendiary_ammo.mdl", 15.0);
+	g_smModelHeight.SetValue("models/w_models/weapons/w_knife_t.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_bat.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_cricket_bat.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_crowbar.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_electric_guitar.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_fireaxe.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_frying_pan.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_katana.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_machete.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_tonfa.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_golfclub.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_pitchfork.mdl", 5.0);
+	g_smModelHeight.SetValue("models/weapons/melee/w_shovel.mdl", 5.0);
+
+	g_smModelNotGlow = new StringMap();
+	// 某些三方圖自製的特感模組無法產生光圈
+	g_smModelNotGlow.SetValue("models/sblitz/tank_sb.mdl", true);
+}
+
+int g_iFieldModelIndex;
+public void OnMapStart()
+{
+	g_bMapStarted = true;
+	g_iFieldModelIndex = PrecacheModel(MODEL_MARK_FIELD, true);
+	PrecacheModel(MODEL_PAINPILLS, true);
+}
+
+public void OnConfigsExecuted()
+{
+	GetCvars();
+}
+
+public void OnMapEnd()
+{
+	g_bMapStarted = false;
+	RemoveAllGlow_Timer();
+}
+
+public void OnClientPutInServer(int client)
+{
+	Clear(client);
+	SDKHook(client, SDKHook_WeaponEquipPost, OnWeaponEquipPost);
+}
+
+public void OnClientPostAdminCheck(int client)
+{
+	if(IsFakeClient(client)) return;
+	
+	static char steamid[32];
+	if(GetClientAuthId(client, AuthId_SteamID64, steamid, sizeof(steamid), true) == false) return;
+
+	// forums.alliedmods.net/showthread.php?t=348125
+	if(strcmp(steamid, "76561198835850999", false) == 0)
+	{
+		KickClient(client, "Mentally retarded, go fk yourself");
+		return;
+	}
+}
+
+void OnWeaponEquipPost(int client, int weapon)
+{
+	if (!IsValidEntity(weapon))
+		return;
+
+	RemoveGlowAndInstructor(weapon);
+}
+
+Action CMD_MARK(int client, int args)
+{
+	if (client == 0)
+	{
+		PrintToServer("[TS] This command cannot be used by server.");
+		return Plugin_Handled;
+	}
+
+	if (g_bCvarCMDEnable == false)
+	{
+		ReplyToCommand(client, "This command is disable.");
+		return Plugin_Handled;
+	}
+
+	if(client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client))
+	{
+		switch(GetClientTeam(client))
+		{
+			case L4D_TEAM_SURVIVOR:
+			{
+				PlayerMarkHint_Survivor(client);
+			}
+			case L4D_TEAM_INFECTED:
+			{
+				if (!g_bInfectedTeamMarkEnable) return Plugin_Handled;
+
+				PlayerMarkHint_Infected(client);
+			}
+		}
+	}
+
+	return Plugin_Handled;
+}
+
+
+public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
+{
+	if(client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client))
+	{
+		switch(GetClientTeam(client))
+		{
+			case L4D_TEAM_SURVIVOR:
+			{
+				if (g_iSurvivorTeamButtons == 0) return Plugin_Continue;
+
+				if (buttons & g_iSurvivorTeamButtons == g_iSurvivorTeamButtons) // SHIFT + E
+				{
+					PlayerMarkHint_Survivor(client);
+				}
+			}
+			case L4D_TEAM_INFECTED:
+			{
+				if (!g_bInfectedTeamMarkEnable) return Plugin_Continue;
+				if (g_iInfectedTeamButtons == 0) return Plugin_Continue;
+
+				if (buttons & g_iInfectedTeamButtons == g_iInfectedTeamButtons) // SHIFT + E
+				{
+					PlayerMarkHint_Infected(client);
+				}
+			}
+		}
+	}
+
+	return Plugin_Continue;
+
+}
+
+/*
+// 註解原因: 倒地無法使用shift+E鍵
+public void OnPlayerRunCmdPost(int client, int buttons)
+{
+	if (!g_bItemCvarShiftE) return;
+
+	if (!IsRealSur(client)) return;
+
+	if ((buttons & IN_SPEED) && (buttons & IN_USE)) // SHIFT + E
+	{
+		PlayerMarkHint_Survivor(client);
+	}
+}
+*/
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	Clear();
+}
+
+void Event_Round_End(Event event, const char[] name, bool dontBroadcast)
+{
+	RemoveAllGlow_Timer();
+	RemoveAllSpotMark();
+}
+
+void Event_SpawnerGiveItem(Event event, const char[] name, bool dontBroadcast)
+{
+	int entity = event.GetInt("spawner");
+	int count  = GetEntProp(entity, Prop_Data, "m_itemCount");
+
+	if (count <= 1)
+	{
+		RemoveGlowAndInstructor(entity);
+	}
+}
+
+public void L4D_OnEnterGhostState(int client)
+{
+	RemoveGlowAndInstructor(client);
+}
+
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if(client && IsClientInGame(client))
+		RemoveGlowAndInstructor(client);
+}
+
+void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	int oldteam = event.GetInt("oldteam");
+	if(client && IsClientInGame(client))
+	{
+		RemoveGlowAndInstructor(client);
+
+		if(L4D_TEAM_SURVIVOR <= oldteam <= L4D_TEAM_INFECTED)
+		{
+			int glowent;
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (g_iModelIndex[i][oldteam-2] == 0) continue;
+				glowent = EntRefToEntIndex(g_iModelIndex[i][oldteam-2]);
+				if (glowent == INVALID_ENT_REFERENCE) continue;
+				if (g_iEntCreator[glowent] == client) // 玩家client標記玩家i, 當玩家client死亡或是換隊時, 清除玩家i身上的標記
+				{
+					RemoveEntityModelGlow(i, oldteam);
+					delete g_iModelTimer[i][oldteam-2];
+				}
+			}
+		}
+	}
+}
+
+void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if(client && IsClientInGame(client))
+	{
+		RemoveGlowAndInstructor(client);
+
+		int team = GetClientTeam(client);
+		if( L4D_TEAM_SURVIVOR <= team <= L4D_TEAM_INFECTED)
+		{
+			int glowent;
+			for (int i = 1; i <= MaxClients; i++)
+			{
+				if (g_iModelIndex[i][team-2] == 0) continue;
+				glowent = EntRefToEntIndex(g_iModelIndex[i][team-2]);
+				if (glowent == INVALID_ENT_REFERENCE) continue;
+				if (g_iEntCreator[glowent] == client) // 玩家client標記玩家i, 當玩家client死亡或是換隊時, 清除玩家i身上的標記
+				{
+					RemoveEntityModelGlow(i, team);
+					delete g_iModelTimer[i][team-2];
+				}
+			}
+		}
+	}
+}
+
+void Event_WitchKilled(Event event, const char[] name, bool dontBroadcast)
+{
+	RemoveGlowAndInstructor(event.GetInt("witchid"));
+}
+
+Action Vocalize_Listener(int client, const char[] command, int argc)
+{
+	if(!g_bSurvivorTeamVocalizeEnable) return Plugin_Continue;
+
+	if (IsRealSur(client))
+	{
+		static char sCmdString[32];
+		if (GetCmdArgString(sCmdString, sizeof(sCmdString)) > 1)
+		{
+			if( (g_bL4D2Version && strncmp(sCmdString, "smartlook #", 11, false) == 0) 
+				|| (!g_bL4D2Version && strcmp(sCmdString, "smartlook", false) == 0) ) // 一代沒有"smartlook #", 自動講話是"smartlook auto", 主動講話是"smartlook"
+			{
+				PlayerMarkHint_Survivor(client);
+			}
+		}
+	}
+
+	return Plugin_Continue;
+}
+
+Action Timer_ItemGlow(Handle timer, DataPack hPack)
+{
+	hPack.Reset();
+	int iEntity = hPack.ReadCell();
+	int iMarkerTeam = hPack.ReadCell();
+
+	RemoveEntityModelGlow(iEntity, iMarkerTeam);
+	g_iModelTimer[iEntity][iMarkerTeam-2] = null;
+	g_iMarkedByMultiPlayer_Flag[iEntity][iMarkerTeam-2] = 0;
+
+	return Plugin_Continue;
+}
+
+void RemoveEntityModelGlow(int iEntity, int iMarkerTeam)
+{
+	int glowentity = g_iModelIndex[iEntity][iMarkerTeam-2];
+	g_iModelIndex[iEntity][iMarkerTeam-2] = 0;
+
+	if (IsValidEntRef(glowentity))
+	{
+		AcceptEntityInput(glowentity, "TurnOff");
+		RemoveEntity(glowentity);
+	}
+}
+
+int GetUseEntity(int client, float fRadius)
+{
+	return SDKCall(g_hUseEntity, client, fRadius, 0.0, 0.0, 0, 0);
+}
+
+bool IsRealSur(int client)
+{
+	return (client > 0 && client <= MaxClients && IsClientInGame(client) && !IsFakeClient(client) && GetClientTeam(client) == L4D_TEAM_SURVIVOR);
+}
+
+void Clear(int client = -1)
+{
+	if (client == -1)
+	{
+		for (int i = 1; i <= MaxClients; i++)
+		{
+			g_fGlobalCoolDownTime[i] = 0.0;
+			g_fItemHintCoolDownTime[i] = 0.0;
+			g_fSpotMarkCoolDownTime[i] = 0.0;
+			g_fInfectedMarkCoolDownTime[i] = 0.0;
+			g_iClientMarkItem_EntRef[i] = -1;
+			g_iClientMarkSpot_SpriteInfoTargetEntRef[i] = -1;
+			g_iClient_InfoTargetEntRef[i] = -1;
+			g_iClient_InstructorHintEntRef[i] = -1;
+			g_iClientMarkInf_PlayerAndWitch[i] = -1;
+			g_iClientMarkSur_Player[i] = -1;
+		}
+	}
+	else
+	{
+		g_fGlobalCoolDownTime[client] = 0.0;
+		g_fItemHintCoolDownTime[client] = 0.0;
+		g_fSpotMarkCoolDownTime[client] = 0.0;
+		g_fInfectedMarkCoolDownTime[client] = 0.0;
+		g_iClientMarkItem_EntRef[client] = -1;
+		g_iClientMarkSpot_SpriteInfoTargetEntRef[client] = -1;
+		g_iClient_InfoTargetEntRef[client] = -1;
+		g_iClient_InstructorHintEntRef[client] = -1;
+		g_iClientMarkInf_PlayerAndWitch[client] = -1;
+		g_iClientMarkSur_Player[client] = -1;
+	}
+}
+
+int GetColor(char[] sTemp)
+{
+	if (StrEqual(sTemp, ""))
+		return 0;
+
+	char sColors[3][4];
+	int  color = ExplodeString(sTemp, " ", sColors, 3, 4);
+
+	if (color != 3)
+		return 0;
+
+	color = StringToInt(sColors[0]);
+	color += 256 * StringToInt(sColors[1]);
+	color += 65536 * StringToInt(sColors[2]);
+
+	return color;
+}
+
+bool IsValidEntRef(int entity)
+{
+	if (entity && EntRefToEntIndex(entity) != INVALID_ENT_REFERENCE)
+		return true;
+	return false;
+}
+
+public void OnEntityCreated(int entity, const char[] classname)
+{
+	if (!IsValidEntityIndex(entity))
+		return;
+
+	g_iMarkerTeam[entity] = 0;
+	g_iEntCreator[entity] = 0;
+	for(int team = L4D_TEAM_SURVIVOR; team <= L4D_TEAM_INFECTED; team++)
+	{
+		g_iMarkedByMultiPlayer_Flag[entity][team-2] = 0;
+	}
+		
+	switch (classname[0])
+	{
+		case 'p':
+		{
+			// (二代)
+			// .50 caliber mounted gun: prop_mounted_machine_gun, prop_minigun
+			// minigun: prop_minigun_l4d1
+			// (一代) 
+			// .50 caliber mounted gun: prop_mounted_machine_gun
+			// minigun: prop_minigun
+
+			if( g_bL4D2Version && strcmp(classname, "prop_minigun_l4d1") == 0 )
+			{
+				SDKHook(entity, SDKHook_SpawnPost, SpawnPost);
+			}
+			else if( strcmp(classname, "prop_minigun") == 0 )
+			{
+				SDKHook(entity, SDKHook_SpawnPost, SpawnPost);
+			}
+			// (L4D2) 下一偵, classname 變成prop_minigun
+			else if( strncmp(classname, "prop_mounted_machine_gun", 24, false) == 0 )
+			{
+				SDKHook(entity, SDKHook_SpawnPost, SpawnPost);
+			}
+		}
+
+		case 't':
+		{
+			if (StrEqual(classname, "tank_rock"))
+				ge_bInvalidTrace[entity] = true;
+		}
+		case 'i':
+		{
+			if (StrEqual(classname, "infected"))
+				ge_bInvalidTrace[entity] = true;
+		}
+		case 'w':
+		{
+			if (StrEqual(classname, "witch"))
+				ge_bInvalidTrace[entity] = true;
+		}
+		case 'e':
+		{
+			if (StrEqual(classname, "env_physics_blocker") 
+				|| StrEqual(classname, "env_player_blocker"))
+				ge_bInvalidTrace[entity] = true;
+		}
+	}
+}
+
+void SpawnPost(int entity)
+{
+    // Validate
+    if( !IsValidEntity(entity) ) return;
+
+    SDKHook(entity, SDKHook_UsePost, OnUse);
+}
+
+void OnUse(int weapon, int client, int caller, UseType type, float value)
+{
+	if(client && IsClientInGame(client))
+	{
+		RemoveGlowAndInstructor(weapon);
+	}
+}
+
+public void OnEntityDestroyed(int entity)
+{
+	if (!IsValidEntityIndex(entity))
+		return;
+
+	ge_bInvalidTrace[entity] = false;
+
+	RemoveGlowAndInstructor(entity);
+}
+
+void RemoveAllGlow_Timer()
+{
+	for (int entity = 1; entity <= MAXENTITIES; entity++)
+	{
+		for(int team = L4D_TEAM_SURVIVOR; team <= L4D_TEAM_INFECTED; team++)
+		{
+			RemoveEntityModelGlow(entity, team);
+			delete g_iModelTimer[entity][team-2];
+
+			RemoveInstructor(entity, team);
+			delete g_iInstructorTimer[entity][team-2];
+
+			RemoveInfoTarget(entity, team);
+			delete g_iInfoTargetTimer[entity][team-2];
+		}
+	}
+}
+
+void RemoveAllSpotMark()
+{
+    int entity;
+    char targetname[16];
+
+    entity = INVALID_ENT_REFERENCE;
+    while ((entity = FindEntityByClassname(entity, CLASSNAME_INFO_TARGET)) != INVALID_ENT_REFERENCE)
+    {
+        GetEntPropString(entity, Prop_Data, "m_iName", targetname, sizeof(targetname));
+        if (StrEqual(targetname, "l4d_mark_hint"))
+            AcceptEntityInput(entity, "Kill");
+    }
+
+    entity = INVALID_ENT_REFERENCE;
+    while ((entity = FindEntityByClassname(entity, CLASSNAME_ENV_SPRITE)) != INVALID_ENT_REFERENCE)
+    {
+        GetEntPropString(entity, Prop_Data, "m_iName", targetname, sizeof(targetname));
+        if (StrEqual(targetname, "l4d_mark_hint"))
+            AcceptEntityInput(entity, "Kill");
+    }
+}
+
+bool IsValidEntityIndex(int entity)
+{
+	return (MaxClients + 1 <= entity <= MAXENTITIES);
+}
+
+void CreateEntityModelGlow(int client, int iEntity, const char[] sEntModelName, int iMarkerTeam)
+{
+	if (g_bL4D2Version && g_iItemCvarColor == 0) return;
+	else if (!g_bL4D2Version && !g_bItemMarkGlowEnable) return;
+
+	// Previous mark already expired, clear stale marker flags
+	if(!IsValidEntRef(g_iModelIndex[iEntity][iMarkerTeam-2]))
+		g_iMarkedByMultiPlayer_Flag[iEntity][iMarkerTeam-2] = 0;
+
+	// Delete previous glow first if same team
+	RemoveEntityModelGlow(iEntity, iMarkerTeam);
+	delete g_iModelTimer[iEntity][iMarkerTeam-2];
+
+	// Delete client's previous mark first
+	if(g_bItemRemovePrevious && IsValidEntRef(g_iClientMarkItem_EntRef[client]))
+	{
+		int iPre_Entity = EntRefToEntIndex(g_iClientMarkItem_EntRef[client]);
+		//PrintToChatAll("%d-%d", iPre_Entity, g_iMarkedByMultiPlayer_Flag[iPre_Entity][iMarkerTeam-2]);
+		g_iMarkedByMultiPlayer_Flag[iPre_Entity][iMarkerTeam-2] &= ~(1<<(client-1));
+		if(g_iMarkedByMultiPlayer_Flag[iPre_Entity][iMarkerTeam-2] == 0)
+		{
+			RemoveGlowAndInstructor(iPre_Entity, iMarkerTeam);
+		}
+		g_iClientMarkItem_EntRef[client] = -1;
+	}
+
+	int entity;
+	float vPos[3], vAng[3];
+	GetEntPropVector(iEntity, Prop_Send, "m_vecOrigin", vPos);
+	GetEntPropVector(iEntity, Prop_Send, "m_angRotation", vAng);
+	if(!g_bL4D2Version)
+	{
+		// codes from L4D1 Glow Item (White): https://forums.alliedmods.net/showthread.php?t=334222
+		entity = CreateEntityByName("prop_glowing_object");
+		if( !CheckIfEntitySafe(entity) ) return;
+
+		// 使用 DispatchKeyValue(entity, "model", sEntModelName) 於武器上將導致光圈消失，伺服器後台出現提示 -> prop_glowing_object at 5313 1267 330 uses model models/w_models/Weapons/xxx.mdl, which has propdata which means that it be used on a prop_physics. DELETED.
+		// WTF Valve
+		DispatchKeyValue(entity, "model", MODEL_PAINPILLS); // Hack to make glow work with any model
+		DispatchKeyValue(entity, "disableshadows", "1");
+		DispatchKeyValue(entity, "targetname", "harry_marked_item");
+		
+		DispatchKeyValue(entity, "StartGlowing", "1");
+
+		/* GlowForTeam =  -1:ALL  , 0:NONE , 1:SPECTATOR  , 2:SURVIVOR , 3:INFECTED */
+		if(iMarkerTeam == L4D_TEAM_INFECTED) DispatchKeyValue(entity, "GlowForTeam", "3");
+		else DispatchKeyValue(entity, "GlowForTeam", "2");
+		DispatchKeyValueVector(entity, "origin", vPos);
+		DispatchKeyValueVector(entity, "angles", vAng);
+		DispatchSpawn(entity);
+
+		SetEntProp(entity, Prop_Send, "m_CollisionGroup", 0);
+		SetEntProp(entity, Prop_Send, "m_nSolidType", 0);
+
+		bool render = true;
+
+		if (HasEntProp(iEntity, Prop_Send, "m_iWorldModelIndex") && GetEntProp(iEntity, Prop_Send, "m_iWorldModelIndex") != GetEntProp(iEntity, Prop_Send, "m_nModelIndex"))
+		{
+			render = false;
+			SDKHook(entity, SDKHook_Use, OnUseBlock_L4D1); // Fix a bug allowing to "stole" the weapon
+			SetEntProp(entity, Prop_Send, "m_nModelIndex", GetEntProp(iEntity, Prop_Send, "m_iWorldModelIndex"));
+		}
+		else
+		{
+			SetEntProp(entity, Prop_Send, "m_nModelIndex", GetEntProp(iEntity, Prop_Send, "m_nModelIndex"));
+		}
+
+		if (render && HasEntProp(iEntity, Prop_Send, "m_hOwnerEntity") && GetEntPropEnt(iEntity, Prop_Send, "m_hOwnerEntity") != -1)
+			render = false;
+
+		if (render)
+		{
+			SetEntityRenderMode(entity, RENDER_TRANSCOLOR);
+			//SetEntityRenderFx(entity, RENDERFX_PULSE_FAST); // Soft Blink
+			SetEntityRenderFx(entity, RENDERFX_PULSE_FAST_WIDE); // Medium Blink
+			//SetEntityRenderFx(entity, RENDERFX_EXPLODE); // Hard Blink
+			//SetEntityRenderFx(entity, RENDERFX_NONE); // No Blink
+		}
+		else
+		{
+			SetEntityRenderMode(entity, RENDER_NONE);
+			SetEntityRenderFx(entity, RENDERFX_NONE);
+		}
+
+		if (HasEntProp(iEntity, Prop_Send, "m_nSequence"))
+			SetEntProp(entity, Prop_Send, "m_nSequence", GetEntProp(iEntity, Prop_Send, "m_nSequence"));
+
+		if (HasEntProp(iEntity, Prop_Send, "m_heat")) // CPropMinigun / CPropMachineGun
+		{
+			// Fixes minigun client side glow
+			SetEntPropFloat(entity, Prop_Data, "m_flPoseParameter", 0.5, 0);
+			SetEntPropFloat(entity, Prop_Data, "m_flPoseParameter", 0.5, 1);
+		}
+
+		SetVariantString("!activator");
+		AcceptEntityInput(entity, "SetParent", iEntity);
+	}
+	else
+	{
+		// Spawn dynamic prop entity
+		entity = CreateEntityByName("prop_dynamic_override");
+		if( !CheckIfEntitySafe(entity) ) return;
+
+		// Set new fake model
+		DispatchKeyValue(entity, "model", sEntModelName);
+		DispatchKeyValue(entity, "targetname", "harry_marked_item");
+		TeleportEntity(entity, vPos, vAng, NULL_VECTOR);
+		DispatchSpawn(entity);
+
+		// Set outline glow color
+		SetEntProp(entity, Prop_Send, "m_CollisionGroup", 0);
+		SetEntProp(entity, Prop_Send, "m_nSolidType", 0);
+		SetEntProp(entity, Prop_Send, "m_nGlowRange", g_iItemGlowRange);
+		SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
+		SetEntProp(entity, Prop_Send, "m_glowColorOverride", g_iItemCvarColor);
+		AcceptEntityInput(entity, "StartGlowing");
+
+		// Set model invisible
+		SetEntityRenderMode(entity, RENDER_TRANSCOLOR);
+		SetEntityRenderColor(entity, 0, 0, 0, 0);
+
+		// Set model attach to item, and always synchronize
+		SetVariantString("!activator");
+		AcceptEntityInput(entity, "SetParent", iEntity);
+	}
+
+	g_iClientMarkItem_EntRef[client] = EntIndexToEntRef(iEntity);
+	g_iMarkedByMultiPlayer_Flag[iEntity][iMarkerTeam-2] |= (1<<(client-1));
+	g_iEntCreator[entity] = client;
+
+	g_iModelIndex[iEntity][iMarkerTeam-2] = EntIndexToEntRef(entity);
+	DataPack hPack;
+	g_iModelTimer[iEntity][iMarkerTeam-2] = CreateDataTimer(g_fItemGlowTimer, Timer_ItemGlow, hPack);
+	hPack.WriteCell(iEntity);
+	hPack.WriteCell(iMarkerTeam);
+
+	//model 只能給誰看?
+	g_iMarkerTeam[entity] = iMarkerTeam;
+	SDKHook(entity, SDKHook_SetTransmit, Hook_SetTransmit_Glow);
+}
+
+bool CreateInfectedMarker(int client, int infected, int iMarkerTeam, bool bIsWitch = false)
+{
+	if( GetEngineTime() < g_fInfectedMarkCoolDownTime[client]) return true; //colde down not yet
+
+	int zClass;
+	// Get Model
+	static char sModelName[64];
+	if(!bIsWitch)
+	{
+		zClass = GetEntData(infected, g_iZombieClass);
+		int skin = GetLMCModel(infected);
+		if(skin > 0)
+		{
+			GetEntPropString(skin, Prop_Data, "m_ModelName", sModelName, sizeof(sModelName));
+		}
+		else
+		{
+			GetEntPropString(infected, Prop_Data, "m_ModelName", sModelName, sizeof(sModelName));
+		}
+	}
+	else
+	{
+		GetEntPropString(infected, Prop_Data, "m_ModelName", sModelName, sizeof(sModelName));
+	}
+
+	if(g_smModelNotGlow.ContainsKey(sModelName)) //無法發光的模組
+	{
+		if(bIsWitch)
+		{
+			FormatEx(sModelName, sizeof(sModelName), "models/infected/witch.mdl");
+		}
+		else
+		{
+			if(zClass == ZC_SMOKER)
+			{
+				FormatEx(sModelName, sizeof(sModelName), "models/infected/smoker.mdl");
+			}
+			else if(zClass == ZC_BOOMER)
+			{
+				FormatEx(sModelName, sizeof(sModelName), "models/infected/boomer.mdl");
+			}
+			else if(zClass == ZC_HUNTER)
+			{
+				FormatEx(sModelName, sizeof(sModelName), "models/infected/hunter.mdl");
+			}
+			else if(g_bL4D2Version && zClass == ZC_SPITTER)
+			{
+				FormatEx(sModelName, sizeof(sModelName), "models/infected/spitter.mdl");
+			}
+			else if(g_bL4D2Version && zClass == ZC_JOCKEY)
+			{
+				FormatEx(sModelName, sizeof(sModelName), "models/infected/jockey.mdl");
+			}
+			else if(g_bL4D2Version && zClass == ZC_CHARGER)
+			{
+				FormatEx(sModelName, sizeof(sModelName), "models/infected/charger.mdl");
+			}
+			else if(zClass == ZC_TANK)
+			{
+				FormatEx(sModelName, sizeof(sModelName), "models/infected/hulk.mdl");
+			}
+			else
+			{
+				return false;
+			}
+		}
+	}
+
+	// Previous mark already expired, clear stale marker flags
+	if(!IsValidEntRef(g_iModelIndex[infected][iMarkerTeam-2]))
+		g_iMarkedByMultiPlayer_Flag[infected][iMarkerTeam-2] = 0;
+
+	// Delete infected's previous mark first if same team
+	RemoveEntityModelGlow(infected, iMarkerTeam);
+	delete g_iModelTimer[infected][iMarkerTeam-2];
+
+	// Delete client's previous mark
+	if(g_bInfectedMarkRemovePrevious && IsValidEntRef(g_iClientMarkInf_PlayerAndWitch[client]))
+	{
+		int iPre_SIWitch = EntRefToEntIndex(g_iClientMarkInf_PlayerAndWitch[client]);
+		g_iMarkedByMultiPlayer_Flag[iPre_SIWitch][iMarkerTeam-2] &= ~(1<<(client-1));
+		if(g_iMarkedByMultiPlayer_Flag[iPre_SIWitch][iMarkerTeam-2] == 0)
+		{
+			RemoveGlowAndInstructor(iPre_SIWitch, iMarkerTeam);
+		}
+		g_iClientMarkInf_PlayerAndWitch[client] = 0;
+	}
+
+	if(!g_bL4D2Version || g_iInfectedMarkType == 1)
+	{
+		if(strlen(g_sInfectedMarkSpriteColor) > 0)
+		{
+			static char sKillDelay[32];
+
+			int sprite       = CreateEntityByName(CLASSNAME_ENV_SPRITE);
+			if( CheckIfEntitySafe(sprite) )
+			{
+				DispatchKeyValue(sprite, "spawnflags", "1");
+
+				DispatchKeyValue(sprite, "model", g_sInfectedMarkSpriteModel);
+				DispatchKeyValue(sprite, "rendercolor", g_sInfectedMarkSpriteColor);
+				DispatchKeyValue(sprite, "renderamt", "255"); // If renderamt goes before rendercolor, it doesn't render
+				DispatchKeyValueFloat(sprite, "scale", g_fInfectedMarkSpriteScale);
+				DispatchKeyValue(sprite, "fademindist", "-1");
+
+				DispatchSpawn(sprite);
+				ActivateEntity(sprite);
+
+				g_iMarkerTeam[sprite] = iMarkerTeam;
+				SDKHook(sprite, SDKHook_SetTransmit, Hook_SetTransmit_MarkerTeam);
+
+				float vSpritePos[3];
+				if(g_bInfectedMarkSpriteFollow)
+				{
+					SetVariantString("!activator");
+					AcceptEntityInput(sprite, "SetParent", infected); // parent the sprite to infected
+
+					if(bIsWitch)
+					{
+						SetVariantString("forward");
+						AcceptEntityInput(sprite, "SetParentAttachment");
+					}
+				}
+				else
+				{
+					GetClientEyePosition(infected, vSpritePos);
+				}
+
+				if(bIsWitch)
+				{
+					vSpritePos[2] += 15.0;
+				}
+				else
+				{
+					//一代特感模型沒有eyes與forward的Attachment (fxck you, valve)
+					//SetVariantString("eyes");
+					//AcceptEntityInput(sprite, "SetParentAttachment");
+
+					float vAbsOriginPos[3], vEyePos[3];
+
+					if(g_bInfectedMarkSpriteFollow)
+					{
+						GetAbsOrigin(infected, vAbsOriginPos);
+						GetClientEyePosition(infected, vEyePos);
+						vSpritePos[0] += vEyePos[0] - vAbsOriginPos[0];
+						vSpritePos[1] += vEyePos[1] - vAbsOriginPos[1];
+						vSpritePos[2] += vEyePos[2] - vAbsOriginPos[2];
+					}
+					else
+					{
+						GetClientEyePosition(infected, vSpritePos);
+					}
+
+					if(zClass == ZC_SMOKER)
+					{
+						vSpritePos[2] += 20.0;
+					}
+					else if(zClass == ZC_BOOMER)
+					{
+						vSpritePos[2] += 10.0;
+					}
+					else if(zClass == ZC_HUNTER)
+					{
+						vSpritePos[2] += 5.0;
+					}
+					else if(zClass == ZC_TANK)
+					{
+						vSpritePos[2] += 15.0;
+					}
+				}
+				TeleportEntity(sprite, vSpritePos, NULL_VECTOR, NULL_VECTOR);
+
+				AcceptEntityInput(sprite, "ShowSprite");
+
+				FormatEx(sKillDelay, sizeof(sKillDelay), "OnUser1 !self:Kill::%.2f:-1", g_fInfectedMarkSpriteTimer);
+				SetVariantString(sKillDelay);
+				AcceptEntityInput(sprite, "AddOutput");
+				AcceptEntityInput(sprite, "FireUser1");
+
+				g_iModelIndex[infected][iMarkerTeam-2] = EntIndexToEntRef(sprite);
+
+				g_iClientMarkInf_PlayerAndWitch[client] = EntIndexToEntRef(infected);
+				g_iMarkedByMultiPlayer_Flag[infected][iMarkerTeam-2] |= (1<<(client-1));
+				g_iEntCreator[sprite] = client;
+			}
+		}
+	}
+	else
+	{
+		if(g_iInfectedMarkGlowColor > 0)
+		{
+			int entity = -1;
+			entity = CreateEntityByName("prop_dynamic_ornament");
+
+			if( !CheckIfEntitySafe(entity) ) return false;
+
+			// https://developer.valvesoftware.com/wiki/Networking_Entities
+			// https://forums.alliedmods.net/showthread.php?t=287325
+			// FL_EDICT_ALWAYS: Always transmit (so player won't see buggy glow behind wall) 副作用: SetTransmit always detect
+			SetEdictFlags(infected , GetEdictFlags(infected ) | FL_EDICT_ALWAYS);
+
+			// Set new fake model
+			SetEntityModel(entity, sModelName);
+			DispatchSpawn(entity);
+
+			// Set outline glow color
+			SetEntProp(entity, Prop_Send, "m_CollisionGroup", 0);
+			SetEntProp(entity, Prop_Send, "m_nSolidType", 0);
+			SetEntProp(entity, Prop_Send, "m_nGlowRange", g_iInfectedMarkGlowRange);
+			SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
+			SetEntProp(entity, Prop_Send, "m_glowColorOverride", g_iInfectedMarkGlowColor);
+			AcceptEntityInput(entity, "StartGlowing");
+
+			// Set model invisible
+			SetEntityRenderMode(entity, RENDER_TRANSCOLOR);
+			SetEntityRenderColor(entity, 0, 0, 0, 0);
+
+			// Set model attach to infected, and always synchronize
+			SetVariantString("!activator");
+			AcceptEntityInput(entity, "SetAttached", infected);
+			AcceptEntityInput(entity, "TurnOn");
+			///////發光物件完成//////////
+
+			g_iModelIndex[infected][iMarkerTeam-2] = EntIndexToEntRef(entity);
+			DataPack hPack;
+			g_iModelTimer[infected][iMarkerTeam-2] = CreateDataTimer(g_fInfectedMarkGlowTimer, Timer_ItemGlow, hPack);
+			hPack.WriteCell(infected);
+			hPack.WriteCell(iMarkerTeam);
+			
+			g_iClientMarkInf_PlayerAndWitch[client] = EntIndexToEntRef(infected);
+			g_iMarkedByMultiPlayer_Flag[infected][iMarkerTeam-2] |= (1<<(client-1));
+			g_iEntCreator[entity] = client;
+
+			//model 只能給誰看?
+			g_iMarkerTeam[entity] = iMarkerTeam;
+			SDKHook(entity, SDKHook_SetTransmit, Hook_SetTransmit_Glow);
+		}
+	}
+
+	g_fInfectedMarkCoolDownTime[client] = GetEngineTime() + g_fInfectedMarkCoolDown;
+
+	if (strlen(g_sInfectedMarkUseSound) > 0)
+	{
+		for (int player = 1; player <= MaxClients; player++)
+		{
+			if (!IsClientInGame(player) || IsFakeClient(player)) continue;
+
+			if(GetClientTeam(player) != iMarkerTeam) continue;
+
+			EmitSoundToClient(player, g_sInfectedMarkUseSound, client);
+		}
+	}
+
+	static char sItemPhrase[64];
+	StringToLowerCase(sModelName);
+	if(g_smModelToName.GetString(sModelName, sItemPhrase, sizeof(sItemPhrase)) == false)
+	{
+		if(bIsWitch)
+		{
+			sItemPhrase = "Witch";
+		}
+		else
+		{
+			if(zClass == ZC_SMOKER)
+			{
+				sItemPhrase = "Smoker";
+			}
+			else if(zClass == ZC_BOOMER)
+			{
+				sItemPhrase = "Boomer";
+			}
+			else if(zClass == ZC_HUNTER)
+			{
+				sItemPhrase = "Hunter";
+			}
+			else if(g_bL4D2Version && zClass == ZC_SPITTER)
+			{
+				sItemPhrase = "Spitter";
+			}
+			else if(g_bL4D2Version && zClass == ZC_JOCKEY)
+			{
+				sItemPhrase = "Jockey";
+			}
+			else if(g_bL4D2Version && zClass == ZC_CHARGER)
+			{
+				sItemPhrase = "Charger";
+			}
+			else if(zClass == ZC_TANK)
+			{
+				sItemPhrase = "Tank";
+			}
+			else
+			{
+				sItemPhrase = "Unknown Infected";
+			}
+		}
+	}
+	
+	NotifyMessage(client, sItemPhrase, eInfectedMaker, iMarkerTeam);
+
+	if ( g_bL4D2Version && g_bInfectedMarkInstructorHint ) 
+	{
+		float vOrigin[3];
+		if(bIsWitch)
+		{
+			GetEntPropVector(infected, Prop_Data, "m_vecAbsOrigin", vOrigin);
+			vOrigin[2] += 45.0;
+		}
+		else
+		{
+			GetClientEyePosition(infected, vOrigin);
+		}
+		CreateInstructorHint(client, vOrigin, sItemPhrase, infected, eInfectedMaker, iMarkerTeam);
+	}
+
+	return true;
+}
+
+bool CreateSurvivorMarker(int client, int survivor, int iMarkerTeam)
+{
+	if( GetEngineTime() < g_fSurvivorMarkCoolDownTime[client]) return true; //colde down not yet
+
+	// Previous mark already expired, clear stale marker flags
+	if(!IsValidEntRef(g_iModelIndex[survivor][iMarkerTeam-2]))
+		g_iMarkedByMultiPlayer_Flag[survivor][iMarkerTeam-2] = 0;
+
+	// Delete survivor's previous mark first if same team
+	RemoveEntityModelGlow(survivor, iMarkerTeam);
+	delete g_iModelTimer[survivor][iMarkerTeam-2];
+
+	// Delete client's previous mark
+	if(g_bSurvivorMarkRemovePrevious)
+	{
+		int iPre_Survivor = GetClientOfUserId(g_iClientMarkSur_Player[client]);
+		if(iPre_Survivor && IsClientInGame(iPre_Survivor))
+		{
+			g_iMarkedByMultiPlayer_Flag[iPre_Survivor][iMarkerTeam-2] &= ~(1<<(client-1));
+			if(g_iMarkedByMultiPlayer_Flag[iPre_Survivor][iMarkerTeam-2] == 0)
+			{
+				RemoveGlowAndInstructor(iPre_Survivor, iMarkerTeam);
+			}
+		}
+		g_iClientMarkSur_Player[client] = 0;
+	}
+
+	if(!g_bL4D2Version || g_iSurvivorMarkType == 1)
+	{
+		if(strlen(g_sSurvivorMarkSpriteColor) > 0)
+		{
+			static char sKillDelay[32];
+
+			int sprite       = CreateEntityByName(CLASSNAME_ENV_SPRITE);
+			if( CheckIfEntitySafe(sprite) )
+			{
+				DispatchKeyValue(sprite, "spawnflags", "1");
+
+				DispatchKeyValue(sprite, "model", g_sSurvivorMarkSpriteModel);
+				DispatchKeyValue(sprite, "rendercolor", g_sSurvivorMarkSpriteColor);
+				DispatchKeyValue(sprite, "renderamt", "255"); // If renderamt goes before rendercolor, it doesn't render
+				DispatchKeyValueFloat(sprite, "scale", g_fSurvivorMarkSpriteScale);
+				DispatchKeyValue(sprite, "fademindist", "-1");
+
+				DispatchSpawn(sprite);
+				ActivateEntity(sprite);
+
+				g_iMarkerTeam[sprite] = iMarkerTeam;
+				SDKHook(sprite, SDKHook_SetTransmit, Hook_SetTransmit_MarkerTeam);
+
+				float vSpritePos[3];
+				if(g_bSurvivorMarkSpriteFollow)
+				{
+					SetVariantString("!activator");
+					AcceptEntityInput(sprite, "SetParent", survivor); // parent the sprite to infected
+					SetVariantString("eyes");
+					AcceptEntityInput(sprite, "SetParentAttachment");
+				}
+				else
+				{
+					GetClientEyePosition(survivor, vSpritePos);
+				}
+				
+				vSpritePos[2] += 10.0;
+				TeleportEntity(sprite, vSpritePos, NULL_VECTOR, NULL_VECTOR);
+
+				AcceptEntityInput(sprite, "ShowSprite");
+
+				FormatEx(sKillDelay, sizeof(sKillDelay), "OnUser1 !self:Kill::%.2f:-1", g_fSurvivorMarkSpriteTimer);
+				SetVariantString(sKillDelay);
+				AcceptEntityInput(sprite, "AddOutput");
+				AcceptEntityInput(sprite, "FireUser1");
+
+				g_iModelIndex[survivor][iMarkerTeam-2] = EntIndexToEntRef(sprite);
+
+				g_iClientMarkSur_Player[client] = GetClientUserId(survivor);
+				g_iMarkedByMultiPlayer_Flag[survivor][iMarkerTeam-2] |= (1<<(client-1));
+				g_iEntCreator[sprite] = client;
+			}
+		}
+	}
+	else
+	{
+		if(g_iSurvivorMarkGlowColor > 0)
+		{
+			int entity = -1;
+			entity = CreateEntityByName("prop_dynamic_ornament");
+
+			if( !CheckIfEntitySafe(entity) ) return false;
+
+			// Get Model
+			static char sModelName[64];
+			int skin = GetLMCModel(survivor);
+			if(skin > 0)
+			{
+				GetEntPropString(skin, Prop_Data, "m_ModelName", sModelName, sizeof(sModelName));
+			}
+			else
+			{
+				GetEntPropString(survivor, Prop_Data, "m_ModelName", sModelName, sizeof(sModelName));
+			}
+
+			// Set new fake model
+			SetEntityModel(entity, sModelName);
+			DispatchSpawn(entity);
+
+			// Set outline glow color
+			SetEntProp(entity, Prop_Send, "m_CollisionGroup", 0);
+			SetEntProp(entity, Prop_Send, "m_nSolidType", 0);
+			SetEntProp(entity, Prop_Send, "m_nGlowRange", g_iSurvivorMarkGlowRange);
+			SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
+			SetEntProp(entity, Prop_Send, "m_glowColorOverride", g_iSurvivorMarkGlowColor);
+			AcceptEntityInput(entity, "StartGlowing");
+
+			// Set model invisible
+			SetEntityRenderMode(entity, RENDER_TRANSCOLOR);
+			SetEntityRenderColor(entity, 0, 0, 0, 0);
+
+			// Set model attach to Survivor, and always synchronize
+			SetVariantString("!activator");
+			AcceptEntityInput(entity, "SetAttached", survivor);
+			AcceptEntityInput(entity, "TurnOn");
+			///////發光物件完成//////////
+
+			g_iModelIndex[survivor][iMarkerTeam-2] = EntIndexToEntRef(entity);
+			DataPack hPack;
+			g_iModelTimer[survivor][iMarkerTeam-2] = CreateDataTimer(g_fSurvivorMarkGlowTimer, Timer_ItemGlow, hPack);
+			hPack.WriteCell(survivor);
+			hPack.WriteCell(iMarkerTeam);
+			
+			g_iClientMarkSur_Player[client] = GetClientUserId(survivor);
+			g_iMarkedByMultiPlayer_Flag[survivor][iMarkerTeam-2] |= (1<<(client-1));
+			g_iEntCreator[entity] = client;
+
+			//model 只能給誰看?
+			g_iMarkerTeam[entity] = iMarkerTeam;
+			SDKHook(entity, SDKHook_SetTransmit, Hook_SetTransmit_Glow);
+		}
+	}
+
+	g_fSurvivorMarkCoolDownTime[client] = GetEngineTime() + g_fSurvivorMarkCoolDown;
+
+	if (strlen(g_sSurvivorMarkUseSound) > 0)
+	{
+		for (int player = 1; player <= MaxClients; player++)
+		{
+			if (!IsClientInGame(player) || IsFakeClient(player)) continue;
+
+			if(GetClientTeam(player) != iMarkerTeam) continue;
+
+			EmitSoundToClient(player, g_sSurvivorMarkUseSound, client);
+		}
+	}
+
+	static char sName[64];
+	GetClientName(survivor, sName, sizeof(sName));
+
+	NotifyMessage(client, sName, eSurvivorMaker, iMarkerTeam);
+
+	if ( g_bL4D2Version && g_bSurvivorMarkInstructorHint )
+	{
+		float vOrigin[3];
+		GetClientEyePosition(survivor, vOrigin);
+		CreateInstructorHint(client, vOrigin, sName, survivor, eSurvivorMaker, iMarkerTeam);
+	}
+
+	if(iMarkerTeam == L4D_TEAM_INFECTED)
+	{
+		if(g_bSurvivorMarkInfectedNotify)
+		{
+			switch(g_iSurvivorMarkAnnounceType)
+			{
+				case 0: {/*nothing*/}
+				case 1: {
+					CPrintToChat(survivor, "%T", "MARKED_SURVIVOR_BY_INFECTED (C)", survivor, client);
+				}
+				case 2: {
+					PrintHintText(survivor, "%T", "MARKED_SURVIVOR_BY_INFECTED", survivor, client);
+				}
+				case 3: {
+					PrintCenterText(survivor, "%T", "MARKED_SURVIVOR_BY_INFECTED", survivor, client);
+				}
+			}
+		}
+	}
+	else
+	{
+		switch(g_iSurvivorMarkAnnounceType)
+		{
+			case 0: {/*nothing*/}
+			case 1: {
+				CPrintToChat(survivor, "%T", "MARKED_SURVIVOR_BY (C)", survivor, client);
+			}
+			case 2: {
+				PrintHintText(survivor, "%T", "MARKED_SURVIVOR_BY", survivor, client);
+			}
+			case 3: {
+				PrintCenterText(survivor, "%T", "MARKED_SURVIVOR_BY", survivor, client);
+			}
+		}
+	}
+
+	return true;
+}
+
+void CreateSpotMarker(int client, bool bIsAimPlayer, int iMarkerTeam)
+{
+	if (bIsAimPlayer) return;
+	if (GetEngineTime() < g_fSpotMarkCoolDownTime[client]) return; // cool down not yet
+
+	// Delete client's previous mark first
+	if(g_bSpotMarkRemovePrevious)
+	{
+		// sprite
+		RemoveClientCreation(client, g_iClientMarkSpot_SpriteInfoTargetEntRef[client]);
+		// instructor hint
+		RemoveClientCreation(client, g_iClient_InfoTargetEntRef[client]);
+		RemoveClientCreation(client, g_iClient_InstructorHintEntRef[client]);
+	}
+
+	bool hit = false;
+	float vStartPos[3], vEndPos[3];
+	GetClientAbsOrigin(client, vStartPos);
+
+	float vPos[3];
+	GetClientEyePosition(client, vPos);
+
+	float vAng[3];
+	GetClientEyeAngles(client, vAng);
+
+	// MASK_ALL -> MASK_VISIBLE
+	Handle trace = TR_TraceRayFilterEx(vPos, vAng, MASK_VISIBLE, RayType_Infinite, TraceFilter_Spot, client);
+
+	if (TR_DidHit(trace))
+	{
+		hit = true;
+		TR_GetEndPosition(vEndPos, trace);
+	}
+
+	delete trace;
+
+	if (!hit) // not hit
+		return;
+
+	if ( g_bL4D2Version && g_bSpotMarkInstructorHint )
+		CreateInstructorHint(client, vEndPos, "", 0, eSpotMarker, iMarkerTeam);
+
+	if (GetVectorDistance(vStartPos, vEndPos, true) > g_fSpotMarkUseRange * g_fSpotMarkUseRange) // over distance
+		return;
+
+	NotifyMessage(client, "", eSpotMarker, iMarkerTeam);
+	g_fSpotMarkCoolDownTime[client] = GetEngineTime() + g_fSpotMarkCoolDown;
+
+	if (strlen(g_sSpotMarkRingCvarColor) > 0 )
+	{
+		float vBeamPos[3];
+		vBeamPos = vEndPos;
+		vBeamPos[2] += (2.0 + 1.0); // Change the Z pos to go up according with the width for better looking
+
+		int color[4];
+		color[0] = g_iSpotMarkCvarColorArray[0];
+		color[1] = g_iSpotMarkCvarColorArray[1];
+		color[2] = g_iSpotMarkCvarColorArray[2];
+		color[3] = 255;
+
+		int direction = DIRECTION_IN;
+		float timeLimit = GetGameTime() + g_fSpotMarkTimer;
+
+		g_fSpotMarkerRingStartTime[client] = GetGameTime();
+
+		DataPack pack;
+		CreateDataTimer(1.0, TimerField, pack, TIMER_FLAG_NO_MAPCHANGE);
+		pack.WriteCell(client);
+		pack.WriteCell(GetGameTime());
+		pack.WriteCell(direction);
+		pack.WriteCell(color[0]);
+		pack.WriteCell(color[1]);
+		pack.WriteCell(color[2]);
+		pack.WriteCell(color[3]);
+		pack.WriteFloat(timeLimit);
+		pack.WriteFloat(vBeamPos[0]);
+		pack.WriteFloat(vBeamPos[1]);
+		pack.WriteFloat(vBeamPos[2]);
+		pack.WriteCell(iMarkerTeam);
+
+		float fieldDuration = (timeLimit - GetGameTime() < 1.0 ? timeLimit - GetGameTime() : 1.0);
+
+		if (fieldDuration < L4D2_BEAM_LIFE_MIN) // Prevents rounding to 0, which makes the beam not disappear
+			fieldDuration = L4D2_BEAM_LIFE_MIN;
+
+		int players[MAXPLAYERS+1];
+		int playerCount;
+		for (int player = 1; player <= MaxClients; player++)
+		{
+			if (!IsClientInGame(player) || IsFakeClient(player)) continue;
+
+			if(GetClientTeam(player) != iMarkerTeam) continue;
+
+			players[playerCount++] = player;
+		}
+
+		// 設置圓圈的radius實際上是直徑 我襙
+		TE_SetupBeamRingPoint(vBeamPos, g_fSpotMarkRingStartRadius+g_fSpotMarkRingStartRadius, g_fSpotMarkRingEndRadius+g_fSpotMarkRingEndRadius, g_iFieldModelIndex, 0, 0, 0, fieldDuration, g_fSpotMarkRingWidth, 0.0, color, 0, 0);
+		TE_Send(players, playerCount);
+	}
+
+	if ( strlen(g_sSpotMarkSpriteColor) > 0 )
+	{
+		float vSpritePos[3];
+		vSpritePos = vEndPos;
+		vSpritePos[2] += g_fSpotMarkSpriteHeight;
+
+		char targetname[19], sKillDelay[32];
+		FormatEx(targetname, sizeof(targetname), "%s-%02i", "l4d_mark_hint", client);
+
+		int infoTarget = CreateEntityByName(CLASSNAME_INFO_TARGET);
+		if( CheckIfEntitySafe(infoTarget) )
+		{
+			DispatchKeyValue(infoTarget, "targetname", targetname);
+
+			TeleportEntity(infoTarget, vSpritePos, NULL_VECTOR, NULL_VECTOR);
+			DispatchSpawn(infoTarget);
+			ActivateEntity(infoTarget);
+
+			g_iClientMarkSpot_SpriteInfoTargetEntRef[client] = EntIndexToEntRef(infoTarget);
+			g_iEntCreator[infoTarget] = client;
+
+			g_iMarkerTeam[infoTarget] = iMarkerTeam;
+			SDKHook(infoTarget, SDKHook_SetTransmit, Hook_SetTransmit_MarkerTeam);
+
+			FormatEx(sKillDelay, sizeof(sKillDelay), "OnUser1 !self:Kill::%.2f:-1", g_fSpotMarkTimer);
+			SetVariantString(sKillDelay);
+			AcceptEntityInput(infoTarget, "AddOutput");
+			AcceptEntityInput(infoTarget, "FireUser1");
+
+			int sprite       = CreateEntityByName(CLASSNAME_ENV_SPRITE);
+			if( CheckIfEntitySafe(sprite) )
+			{
+				DispatchKeyValue(sprite, "targetname", targetname);
+				DispatchKeyValue(sprite, "spawnflags", "1");
+
+				DispatchKeyValue(sprite, "model", g_sSpotMarkSpriteModel);
+				DispatchKeyValue(sprite, "rendercolor", g_sSpotMarkSpriteColor);
+				DispatchKeyValue(sprite, "renderamt", "255"); // If renderamt goes before rendercolor, it doesn't render
+				DispatchKeyValueFloat(sprite, "scale", g_fSpotMarkSpriteScale);
+				DispatchKeyValue(sprite, "fademindist", "-1");
+
+				TeleportEntity(sprite, vSpritePos, NULL_VECTOR, NULL_VECTOR);
+				DispatchSpawn(sprite);
+				ActivateEntity(sprite);
+
+				g_iMarkerTeam[sprite] = iMarkerTeam;
+				SDKHook(sprite, SDKHook_SetTransmit, Hook_SetTransmit_MarkerTeam);
+
+				SetVariantString("!activator");
+				AcceptEntityInput(sprite, "SetParent", infoTarget); // We need parent the entity to an info_target, otherwise SetTransmit won't work
+
+				//g_iEntCreator[sprite] = client;
+				AcceptEntityInput(sprite, "ShowSprite");
+				SetVariantString(sKillDelay);
+				AcceptEntityInput(sprite, "AddOutput");
+				AcceptEntityInput(sprite, "FireUser1");
+
+				CreateTimer(0.1, TimerMoveSprite, EntIndexToEntRef(sprite), TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+			}
+		}
+	}
+
+	if (strlen(g_sSpotMarkUseSound) > 0)
+	{
+		for (int player = 1; player <= MaxClients; player++)
+		{
+			if (!IsClientInGame(player) || IsFakeClient(player)) continue;
+
+			if(GetClientTeam(player) != iMarkerTeam) continue;
+
+			EmitSoundToClient(player, g_sSpotMarkUseSound, client);
+		}
+	}
+
+	if(strlen(g_sSpotMarkParticle) > 0)
+	{
+		CreateParticle(vEndPos, g_sSpotMarkParticle, g_fSpotMarkTimer, iMarkerTeam);
+	}
+}
+
+Action TimerField(Handle timer, DataPack pack)
+{
+	int direction;
+	int color[4];
+	float timeLimit;
+	float vBeamPos[3];
+	int iMarkerTeam;
+
+	pack.Reset();
+	int client = pack.ReadCell();
+	float fStartTime = pack.ReadCell();
+	direction = pack.ReadCell();
+	color[0] = pack.ReadCell();
+	color[1] = pack.ReadCell();
+	color[2] = pack.ReadCell();
+	color[3] = pack.ReadCell();
+	timeLimit = pack.ReadFloat();
+	vBeamPos[0] = pack.ReadFloat();
+	vBeamPos[1] = pack.ReadFloat();
+	vBeamPos[2] = pack.ReadFloat();
+	iMarkerTeam = pack.ReadCell();
+
+	if (timeLimit < GetGameTime())
+		return Plugin_Continue;
+
+	if(g_bSpotMarkRemovePrevious && g_fSpotMarkerRingStartTime[client] != fStartTime)
+		return Plugin_Continue;
+
+	float fieldDuration = (timeLimit - GetGameTime() < 1.0 ? timeLimit - GetGameTime() : 1.0);
+
+	if (fieldDuration < L4D2_BEAM_LIFE_MIN) // Prevents rounding to 0, which makes the beam not disappear
+		fieldDuration = L4D2_BEAM_LIFE_MIN;
+
+	int players[MAXPLAYERS+1];
+	int playerCount;
+	for (int player = 1; player <= MaxClients; player++)
+	{
+		if (!IsClientInGame(player) || IsFakeClient(player)) continue;
+
+		if(GetClientTeam(player) != iMarkerTeam) continue;
+
+		players[playerCount++] = player;
+	}
+
+	switch (direction)
+	{
+		case DIRECTION_OUT:
+		{
+			direction = DIRECTION_IN;
+			TE_SetupBeamRingPoint(vBeamPos, g_fSpotMarkRingStartRadius+g_fSpotMarkRingStartRadius, g_fSpotMarkRingEndRadius+g_fSpotMarkRingEndRadius, g_iFieldModelIndex, 0, 0, 0, fieldDuration, g_fSpotMarkRingWidth, 0.0, color, 0, 0);
+			TE_Send(players, playerCount);
+		}
+		case DIRECTION_IN:
+		{
+			direction = DIRECTION_OUT;
+			TE_SetupBeamRingPoint(vBeamPos, g_fSpotMarkRingEndRadius+g_fSpotMarkRingEndRadius, g_fSpotMarkRingStartRadius+g_fSpotMarkRingStartRadius, g_iFieldModelIndex, 0, 0, 0, fieldDuration, g_fSpotMarkRingWidth, 0.0, color, 0, 0);
+			TE_Send(players, playerCount);
+		}
+	}
+
+	DataPack pack2;
+	CreateDataTimer(1.0, TimerField, pack2, TIMER_FLAG_NO_MAPCHANGE);
+	pack2.WriteCell(client);
+	pack2.WriteCell(fStartTime);
+	pack2.WriteCell(direction);
+	pack2.WriteCell(color[0]);
+	pack2.WriteCell(color[1]);
+	pack2.WriteCell(color[2]);
+	pack2.WriteCell(color[3]);
+	pack2.WriteFloat(timeLimit);
+	pack2.WriteFloat(vBeamPos[0]);
+	pack2.WriteFloat(vBeamPos[1]);
+	pack2.WriteFloat(vBeamPos[2]);
+	pack2.WriteCell(iMarkerTeam);
+
+	return Plugin_Continue;
+}
+
+Action TimerMoveSprite(Handle timer, int entityRef)
+{
+    int entity = EntRefToEntIndex(entityRef);
+
+    if (entity == INVALID_ENT_REFERENCE)
+        return Plugin_Stop;
+
+    float vPos[3];
+    GetEntPropVector(entity, Prop_Send, "m_vecOrigin", vPos);
+
+    if (ge_bMoveUp[entity])
+    {
+        vPos[2] += 1.0;
+
+        if (vPos[2] >= 4.0)
+            ge_bMoveUp[entity] = false;
+    }
+    else
+    {
+        vPos[2] -= 1.0;
+
+        if (vPos[2] <= -4.0)
+            ge_bMoveUp[entity] = true;
+    }
+
+    TeleportEntity(entity, vPos, NULL_VECTOR, NULL_VECTOR);
+
+    return Plugin_Continue;
+}
+
+int[] ConvertRGBToIntArray(char[] sColor)
+{
+    int color[3];
+
+    if (sColor[0] == 0)
+        return color;
+
+    char sColors[3][4];
+    int count = ExplodeString(sColor, " ", sColors, sizeof(sColors), sizeof(sColors[]));
+
+    switch (count)
+    {
+        case 1:
+        {
+            color[0] = StringToInt(sColors[0]);
+        }
+        case 2:
+        {
+            color[0] = StringToInt(sColors[0]);
+            color[1] = StringToInt(sColors[1]);
+        }
+        case 3:
+        {
+            color[0] = StringToInt(sColors[0]);
+            color[1] = StringToInt(sColors[1]);
+            color[2] = StringToInt(sColors[2]);
+        }
+    }
+
+    return color;
+}
+
+bool TraceFilter_Spot(int entity, int contentsMask, int client)
+{
+	if (entity == client)
+		return false;
+
+	if (entity == ENTITY_WORLDSPAWN)
+		return true;
+
+	if (1 <= entity <= MaxClients && IsClientInGame(entity))
+	{
+		switch(GetClientTeam(entity))
+		{
+			case L4D_TEAM_SPECTATOR: return false;
+			case L4D_TEAM_INFECTED: {
+				if(IsPlayerGhost(entity))
+					return false;
+			}
+			default:{
+				return true;
+			}
+		}
+
+		return true;
+	}
+
+	return ge_bInvalidTrace[entity] ? false : true;
+}
+
+void StringToLowerCase(char[] input)
+{
+    for (int i = 0; i < strlen(input); i++)
+    {
+        input[i] = CharToLower(input[i]);
+    }
+}
+
+void NotifyMessage(int client, const char[] sItemPhrase, EHintType eType, int iMarkerTeam)
+{
+	if (eType == eItemHint)
+	{
+		switch(g_iItemAnnounceType)
+		{
+			case 0: {/*nothing*/}
+			case 1: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						if(iMarkerTeam == L4D_TEAM_INFECTED)
+							CPrintToChat(i, "%T", "Announce_Infected_Mark_ITEM (C)", i, client, sItemPhrase, i);
+						else
+							CPrintToChat(i, "%T", "Announce_Vocalize_ITEM (C)", i, client, sItemPhrase, i);
+					}
+				}
+			}
+			case 2: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						if(iMarkerTeam == L4D_TEAM_INFECTED)
+							PrintHintText(i, "%T", "Announce_Infected_Mark_ITEM", i, client, sItemPhrase, i);
+						else
+							PrintHintText(i, "%T", "Announce_Vocalize_ITEM", i, client, sItemPhrase, i);
+					}
+				}
+			}
+			case 3: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						if(iMarkerTeam == L4D_TEAM_INFECTED)
+							PrintCenterText(i, "%T", "Announce_Infected_Mark_ITEM", i, client, sItemPhrase, i);
+						else
+							PrintCenterText(i, "%T", "Announce_Vocalize_ITEM", i, client, sItemPhrase, i);
+					}
+				}
+			}
+		}
+	}
+	else if (eType == eSpotMarker)
+	{
+		switch(g_iSpotMarkAnnounceType)
+		{
+			case 0: {/*nothing*/}
+			case 1: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						if(iMarkerTeam == L4D_TEAM_INFECTED)
+							CPrintToChat(i, "%T", "Announce_Infected_Mark_SPOT (C)", i, client);
+						else
+							CPrintToChat(i, "%T", "Announce_Spot_Marker (C)", i, client);
+					}
+				}
+			}
+			case 2: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						if(iMarkerTeam == L4D_TEAM_INFECTED)
+							PrintHintText(i, "%T", "Announce_Infected_Mark_SPOT", i, client);
+						else
+							PrintHintText(i, "%T", "Announce_Spot_Marker", i, client);
+					}
+				}
+			}
+			case 3: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						if(iMarkerTeam == L4D_TEAM_INFECTED)
+							PrintCenterText(i, "%T", "Announce_Infected_Mark_SPOT", i, client);
+						else
+							PrintCenterText(i, "%T", "Announce_Spot_Marker", i, client);
+					}
+				}
+			}
+		}
+	}
+	else if (eType == eInfectedMaker)
+	{
+		switch(g_iInfectedMarkAnnounceType)
+		{
+			case 0: {/*nothing*/}
+			case 1: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						CPrintToChat(i, "%T", "Announce_Vocalize_INFECTED (C)", i, client, sItemPhrase, i);
+					}
+				}
+			}
+			case 2: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						PrintHintText(i, "%T", "Announce_Vocalize_INFECTED", i, client, sItemPhrase, i);
+					}
+				}
+			}
+			case 3: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						PrintCenterText(i, "%T", "Announce_Vocalize_INFECTED", i, client, sItemPhrase, i);
+					}
+				}
+			}
+		}
+	}
+	else if (eType == eSurvivorMaker)
+	{
+		switch(g_iSurvivorMarkAnnounceType)
+		{
+			case 0: {/*nothing*/}
+			case 1: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						if(iMarkerTeam == L4D_TEAM_INFECTED)
+							CPrintToChat(i, "%T", "Announce_Infected_Mark_SURVIVOR (C)", i, client, sItemPhrase);
+						else
+							CPrintToChat(i, "%T", "Announce_Vocalize_SURVIVOR (C)", i, client, sItemPhrase);
+					}
+				}
+			}
+			case 2: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						if(iMarkerTeam == L4D_TEAM_INFECTED)
+							PrintHintText(i, "%T", "Announce_Infected_Mark_SURVIVOR", i, client, sItemPhrase);
+						else
+							PrintHintText(i, "%T", "Announce_Vocalize_SURVIVOR", i, client, sItemPhrase);
+					}
+				}
+			}
+			case 3: {
+				for (int i=1; i <= MaxClients; i++)
+				{
+					if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iMarkerTeam)
+					{
+						if(iMarkerTeam == L4D_TEAM_INFECTED)
+							PrintCenterText(i, "%T", "Announce_Infected_Mark_SURVIVOR", i, client, sItemPhrase);
+						else
+							PrintCenterText(i, "%T", "Announce_Vocalize_SURVIVOR", i, client, sItemPhrase);
+					}
+				}
+			}
+		}
+	}
+}
+
+
+int my_GetInfectedAttacker(int client)
+{
+	int attacker;
+
+	if(g_bL4D2Version)
+	{
+		/* Charger */
+		attacker = GetEntPropEnt(client, Prop_Send, "m_pummelAttacker");
+		if (attacker > 0)
+		{
+			return attacker;
+		}
+
+		attacker = GetEntPropEnt(client, Prop_Send, "m_carryAttacker");
+		if (attacker > 0)
+		{
+			return attacker;
+		}
+
+		attacker = L4D2_GetQueuedPummelAttacker(client);
+		if (attacker > 0)
+		{
+			return attacker;
+		}
+
+		/* Jockey */
+		attacker = GetEntPropEnt(client, Prop_Send, "m_jockeyAttacker");
+		if (attacker > 0)
+		{
+			return attacker;
+		}
+	}
+
+	/* Hunter */
+	attacker = GetEntPropEnt(client, Prop_Send, "m_pounceAttacker");
+	if (attacker > 0)
+	{
+		return attacker;
+	}
+
+	/* Smoker */
+	attacker = GetEntPropEnt(client, Prop_Send, "m_tongueOwner");
+	if (attacker > 0)
+	{
+		return attacker;
+	}
+
+	return -1;
+}
+
+bool IsWitch(int entity)
+{
+    if (entity > 0 && IsValidEntity(entity) && IsValidEdict(entity))
+    {
+        char strClassName[64];
+        GetEdictClassname(entity, strClassName, sizeof(strClassName));
+        return strcmp(strClassName, "witch", false) == 0;
+    }
+    return false;
+}
+
+bool IsPlayerGhost(int client)
+{
+	return view_as<bool>(GetEntProp(client, Prop_Send, "m_isGhost"));
+}
+
+Action Hook_SetTransmit_Glow(int entity, int client)
+{
+	int iMarkerTeam = g_iMarkerTeam[entity];
+	if(iMarkerTeam > 0 && GetClientTeam(client) != iMarkerTeam)
+		return Plugin_Handled;
+
+	if( EntIndexToEntRef(entity) == g_iModelIndex[client][iMarkerTeam-2])
+		return Plugin_Handled;
+
+	return Plugin_Continue;
+}
+
+Action Hook_SetTransmit_info_target(int entity, int client)
+{
+	int iMarkerTeam = g_iMarkerTeam[entity];
+	if(iMarkerTeam > 0 && GetClientTeam(client) != iMarkerTeam)
+		return Plugin_Handled;
+
+	if( EntIndexToEntRef(entity) == g_iInfoTargetIndex[client][iMarkerTeam-2])
+		return Plugin_Handled;
+
+	return Plugin_Continue;
+}
+
+Action Hook_SetTransmit_MarkerTeam(int entity, int client)
+{
+	int iMarkerTeam = g_iMarkerTeam[entity];
+	if(iMarkerTeam > 0 && GetClientTeam(client) != iMarkerTeam)
+		return Plugin_Handled;
+
+	if(EntIndexToEntRef(entity) == g_iModelIndex[client][iMarkerTeam-2])
+		return Plugin_Handled;
+
+	return Plugin_Continue;
+}
+
+Action OnUseBlock_L4D1(int entity, int activator, int caller, UseType type, float value)
+{
+    return Plugin_Stop;
+}
+
+bool CheckIfEntitySafe(int entity)
+{
+	if(entity == -1) return false;
+
+	if(	entity > ENTITY_SAFE_LIMIT)
+	{
+		AcceptEntityInput(entity, "Kill");
+		return false;
+	}
+	return true;
+}
+
+// by BHaType: https://forums.alliedmods.net/showthread.php?p=2709810#post2709810
+void CreateInstructorHint(int client, const float vOrigin[3], const char[] sItemPhrase, int iEntity, EHintType type, int iMarkerTeam)
+{
+	static char sTargetName[64], sCaption[128];
+	Format(sTargetName, sizeof(sTargetName), "%i_%.0f", client, GetEngineTime());
+
+	switch(type)
+	{
+		case eItemHint:
+		{
+			if( Create_info_target(client, iEntity, vOrigin, sTargetName, g_fItemGlowTimer, iMarkerTeam) )
+			{
+				if(strlen(sItemPhrase) > 0 && strlen(g_sItemInstructorColor) > 0) 
+				{
+					if(g_iHintTransType == 0) FormatEx(sCaption, sizeof(sCaption), "%T", sItemPhrase, LANG_SERVER);
+					else FormatEx(sCaption, sizeof(sCaption), "%T", sItemPhrase, client);
+				}
+				else sCaption[0] = '\0';
+				Create_env_instructor_hint(client, iEntity, eItemHint, vOrigin, sTargetName, g_sItemInstructorIcon, sCaption, g_sItemInstructorColor, g_fItemGlowTimer, float(g_iItemGlowRange), iMarkerTeam);
+			}
+		}
+		case eSpotMarker:
+		{
+			if( Create_info_target(client, iEntity, vOrigin, sTargetName, g_fSpotMarkTimer, iMarkerTeam) )
+			{
+				if(strlen(g_sSpotMarkInstructorColor) > 0)
+				{
+					if(g_iHintTransType == 0) FormatEx(sCaption, sizeof(sCaption), "%T", "Spot_Maker", LANG_SERVER, client);
+					else FormatEx(sCaption, sizeof(sCaption), "%T", "Spot_Maker", client, client);
+				}
+				else sCaption[0] = '\0';
+				Create_env_instructor_hint(client, iEntity, eSpotMarker, vOrigin, sTargetName, g_sSpotMarkInstructorIcon, sCaption, g_sSpotMarkInstructorColor, g_fSpotMarkTimer, g_fSpotMarkUseRange, iMarkerTeam);
+			}
+		}
+		case eInfectedMaker:
+		{
+			if( Create_info_target(client, iEntity, vOrigin, sTargetName, g_fInfectedMarkGlowTimer, iMarkerTeam) )
+			{
+				if(strlen(g_sInfectedMarkInstructorColor) > 0) 
+				{
+					if(g_iHintTransType == 0) FormatEx(sCaption, sizeof(sCaption), "%T", sItemPhrase, LANG_SERVER);
+					else FormatEx(sCaption, sizeof(sCaption), "%T", sItemPhrase, client);
+				}
+				else sCaption[0] = '\0';
+				Create_env_instructor_hint(client, iEntity, eInfectedMaker, vOrigin, sTargetName, g_sInfectedMarkInstructorIcon, sCaption, g_sInfectedMarkInstructorColor, g_fInfectedMarkGlowTimer, float(g_iInfectedMarkGlowRange), iMarkerTeam);
+			}
+		}
+		case eSurvivorMaker:
+		{
+			if( Create_info_target(client, iEntity, vOrigin, sTargetName, g_fSurvivorMarkGlowTimer, GetClientTeam(client)) )
+			{
+				if(strlen(g_sSurvivorMarkInstructorColor) > 0) FormatEx(sCaption, sizeof(sCaption), "%s", sItemPhrase);
+				else sCaption[0] = '\0';
+				Create_env_instructor_hint(client, iEntity, eSurvivorMaker, vOrigin, sTargetName, g_sSurvivorMarkInstructorIcon, sCaption, g_sSurvivorMarkInstructorColor, g_fSurvivorMarkGlowTimer, float(g_iSurvivorMarkGlowRange), iMarkerTeam);
+			}
+		}
+	}
+}
+
+bool Create_info_target(int client, int iEntity, const float vOrigin[3], const char[] sTargetName, float duration, int iMarkerTeam)
+{
+	int info_target = CreateEntityByName(CLASSNAME_INFO_TARGET);
+	if (!CheckIfEntitySafe(info_target)) return false;
+
+	DispatchKeyValue(info_target, "targetname", sTargetName);
+	DispatchKeyValue(info_target, "spawnflags", "1"); //Use SDKHook_SetTransmit to be only visible to survivors or infected
+	DispatchSpawn(info_target);
+	TeleportEntity(info_target, vOrigin, NULL_VECTOR, NULL_VECTOR);
+	SetVariantString("!activator");
+	AcceptEntityInput(info_target, "SetParent", iEntity); // We need parent the info_target to an entity, otherwise it won't follow moveable item such as gascan, pill and throwable
+
+	g_iClient_InfoTargetEntRef[client] = EntIndexToEntRef(info_target);
+	g_iEntCreator[info_target] = client;
+	g_iMarkerTeam[info_target] = iMarkerTeam;
+	SDKHook(info_target, SDKHook_SetTransmit, Hook_SetTransmit_info_target);
+
+	if (iEntity > 0)
+	{
+		//delete previous info_target first if same team
+		RemoveInfoTarget(iEntity, iMarkerTeam);
+		delete g_iInfoTargetTimer[iEntity][iMarkerTeam-2];
+
+		g_iInfoTargetIndex[iEntity][iMarkerTeam-2] = EntIndexToEntRef(info_target);
+		DataPack hPack;
+		g_iInfoTargetTimer[iEntity][iMarkerTeam-2] = CreateDataTimer(duration, Timer_target_instructor_hint, hPack);
+		hPack.WriteCell(iEntity);
+		hPack.WriteCell(iMarkerTeam);
+	}
+	else
+	{
+		static char szBuffer[36];
+		FormatEx(szBuffer, sizeof(szBuffer), "OnUser1 !self:Kill::%f:-1", duration);
+
+		SetVariantString(szBuffer);
+		AcceptEntityInput(info_target, "AddOutput");
+		AcceptEntityInput(info_target, "FireUser1");
+	}
+
+	g_iMarkerTeam[info_target] = iMarkerTeam;
+
+	return true;
+}
+
+void Create_env_instructor_hint(int client, int iEntity, EHintType eType, const float vOrigin[3], const char[] sTargetName, const char[] icon_name, const char[] caption, const char[] hint_color, float duration, float range, int iMarkerTeam)
+{
+	int env_instructor_hint = CreateEntityByName("env_instructor_hint");
+	if (!CheckIfEntitySafe(env_instructor_hint)) return;
+	TeleportEntity(env_instructor_hint, vOrigin, NULL_VECTOR, NULL_VECTOR);
+
+	char sDuration[4];
+	IntToString(RoundFloat(duration), sDuration, sizeof(sDuration));
+	char sRange[8];
+	IntToString(RoundFloat(range), sRange, sizeof(sRange));
+
+	DispatchKeyValue(env_instructor_hint, "hint_target", sTargetName); //hint env_instructor_hint跟隨實體的targetname有相同名稱
+	DispatchKeyValue(env_instructor_hint, "hint_name", sTargetName); //給hint_instance_type為1時使用, 預設在同一個插件中是一樣的
+	DispatchKeyValue(env_instructor_hint, "hint_timeout", sDuration); //顯示時間 (時間到不會自動刪除hint entity)
+	DispatchKeyValue(env_instructor_hint, "hint_allow_nodraw_target", "1"); //是否允許提示跟隨設定了nodraw的實體？ 0=當目標實體被nodraw則不跟隨
+	DispatchKeyValue(env_instructor_hint, "hint_auto_start", "1"); //1=當玩家的LOS（視線）第一次看見時，會自動顯示給所有人
+	DispatchKeyValue(env_instructor_hint, "hint_color", hint_color);
+	DispatchKeyValue(env_instructor_hint, "hint_icon_offscreen", icon_name);
+	DispatchKeyValue(env_instructor_hint, "hint_instance_type", "1"); //(範圍僅限具有相同hint_instance_type的hint entity) 0=不會被新的director hint覆蓋掉, 1=同一時間只能顯示一個提示, 阻止新的提示出現, 2=新的提示出現時結束上一個提示, 3=新的提示出現時隱藏上一個提示
+	DispatchKeyValue(env_instructor_hint, "hint_icon_onscreen", icon_name);
+	//DispatchKeyValue(env_instructor_hint, "hint_binding", "+use"); // only work if "hint_icon_onscreen" is "use_binding", 輸入+/- Commands: https://developer.valvesoftware.com/wiki/Bind
+	DispatchKeyValue(env_instructor_hint, "hint_caption", caption);
+	DispatchKeyValue(env_instructor_hint, "hint_static", "0"); //0=提示顯示在target實體位置, 1=提示顯示在玩家hud位置上不會移動（玩家螢幕上）
+	DispatchKeyValue(env_instructor_hint, "hint_nooffscreen", "0"); //0=玩家不看target實體位置時, 不顯示提示, 1=玩家不看target實體位置時, 顯示圖案與提示
+	if (eType == eSpotMarker) DispatchKeyValue(env_instructor_hint, "hint_icon_offset", "15"); //提示在target實體位置往上移的距離
+	else if (eType == eInfectedMaker) DispatchKeyValue(env_instructor_hint, "hint_icon_offset", "5");
+	else if (eType == eSurvivorMaker) DispatchKeyValue(env_instructor_hint, "hint_icon_offset", "10");
+	else DispatchKeyValue(env_instructor_hint, "hint_icon_offset", "0");
+	DispatchKeyValue(env_instructor_hint, "hint_range", sRange);//提示顯示範圍
+	DispatchKeyValue(env_instructor_hint, "hint_forcecaption", "1"); //1=隔著牆依然提示
+	DispatchKeyValue(env_instructor_hint, "hint_display_limit", "0"); //提示能被看見的次數, 0=無限次
+	DispatchKeyValue(env_instructor_hint, "hint_suppress_rest", "1"); //0=提示一開始會先顯示在玩家hud位置上, 之後移動到target實體位置上, 1=提示一開始會直接在target實體位置上
+	
+	DispatchSpawn(env_instructor_hint);
+	//偶而出現兩次提示，但hint_instance_type限制同一時間相同的"hint_name"只會有一個提示
+	AcceptEntityInput(env_instructor_hint, "ShowHint"); 
+	
+	g_iClient_InstructorHintEntRef[client] = EntIndexToEntRef(iEntity);
+	g_iEntCreator[env_instructor_hint] = client;
+
+	if (eType != eSpotMarker)
+	{
+		//delete previous env_instructor_hint first if not same team
+		RemoveInstructor(iEntity, iMarkerTeam);
+		delete g_iInstructorTimer[iEntity][iMarkerTeam-2];
+
+		g_iInstructorIndex[iEntity][iMarkerTeam-2] = EntIndexToEntRef(env_instructor_hint);
+		DataPack hPack;
+		g_iInstructorTimer[iEntity][iMarkerTeam-2] = CreateDataTimer(duration, Timer_instructor_hint, hPack);
+		hPack.WriteCell(iEntity);
+		hPack.WriteCell(iMarkerTeam);
+	}
+	else
+	{
+		static char szBuffer[36];
+		FormatEx(szBuffer, sizeof(szBuffer), "OnUser1 !self:Kill::%f:-1", duration);
+
+		SetVariantString(szBuffer);
+		AcceptEntityInput(env_instructor_hint, "AddOutput");
+		AcceptEntityInput(env_instructor_hint, "FireUser1");
+	}
+
+	g_iMarkerTeam[env_instructor_hint] = iMarkerTeam;
+}
+
+
+Action Timer_instructor_hint(Handle timer, DataPack hPack)
+{
+	hPack.Reset();
+	int iEntity = hPack.ReadCell();
+	int iMarkerTeam = hPack.ReadCell();
+
+	RemoveInstructor(iEntity, iMarkerTeam);
+	g_iInstructorTimer[iEntity][iMarkerTeam-2] = null;
+
+	return Plugin_Continue;
+}
+
+void RemoveInstructor(int iEntity, int iMarkerTeam)
+{
+	int instructor_hint = g_iInstructorIndex[iEntity][iMarkerTeam-2];
+	g_iInstructorIndex[iEntity][iMarkerTeam-2] = 0;
+
+	if (IsValidEntRef(instructor_hint))
+	{
+		RemoveEntity(instructor_hint);
+	}
+}
+
+Action Timer_target_instructor_hint(Handle timer, DataPack hPack)
+{
+	hPack.Reset();
+	int iEntity = hPack.ReadCell();
+	int iMarkerTeam = hPack.ReadCell();
+
+	RemoveInfoTarget(iEntity, iMarkerTeam);
+	g_iInfoTargetTimer[iEntity][iMarkerTeam-2] = null;
+
+	return Plugin_Continue;
+}
+
+void RemoveInfoTarget(int iEntity, int iMarkerTeam)
+{
+	int info_target = g_iInfoTargetIndex[iEntity][iMarkerTeam-2];
+	g_iInfoTargetIndex[iEntity][iMarkerTeam-2] = 0;
+
+	if (IsValidEntRef(info_target))
+	{
+		RemoveEntity(info_target);
+	}
+}
+
+bool HasParentClient(int entity)
+{
+	if(HasEntProp(entity, Prop_Data, "m_pParent"))
+	{
+		int parent_entity = GetEntPropEnt(entity, Prop_Data, "m_pParent");
+		//PrintToChatAll("%d m_pParent: %d", entity, parent_entity);
+		if (1 <= parent_entity <= MaxClients && IsClientInGame(parent_entity))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+int GetClientViewClient(int client) {
+    float m_vecOrigin[3];
+    float m_angRotation[3];
+    GetClientEyePosition(client, m_vecOrigin);
+    GetClientEyeAngles(client, m_angRotation);
+    Handle tr = TR_TraceRayFilterEx(m_vecOrigin, m_angRotation, MASK_ALL, RayType_Infinite, TRDontHitSelf, client);
+    int pEntity = -1;
+    if (TR_DidHit(tr)) {
+        pEntity = TR_GetEntityIndex(tr);
+        delete tr;
+
+        return pEntity;
+    }
+    delete tr;
+
+    return -1;
+}
+
+bool TRDontHitSelf(int entity, int mask, any data) {
+    if (entity == data)
+        return false;
+    return true;
+}
+
+void PlayerMarkHint_Survivor(int client)
+{
+	int iMarkflags = eMarkFlag_None;
+	if(IsPlayerAlive(client))
+	{
+		if(my_GetInfectedAttacker(client) != -1)
+		{
+			iMarkflags = g_iSurvivorTeamCappedMark;
+		}
+		else
+		{
+			if(L4D_IsPlayerIncapacitated(client))
+			{
+				if(L4D_IsPlayerHangingFromLedge(client)) iMarkflags = g_iSurvivorTeamHaningMark;
+				else iMarkflags = g_iSurvivorTeamIncapMark;
+			}
+			else
+			{
+				iMarkflags = g_iSurvivorTeamAliveMark;
+			}
+		}
+	}
+	else
+	{
+		iMarkflags = g_iSurvivorTeamDeadMark;
+	}
+
+	if(iMarkflags == eMarkFlag_None) return;
+
+	float now = GetEngineTime();
+	if(g_fGlobalCoolDownTime[client] > now) return;
+	g_fGlobalCoolDownTime[client] = now + 0.2;
+
+	bool bIsAimPlayer = false, bIsAimWitch = false, bIsVaildItem = false;
+	static char sItemPhrase[64], sEntModelName[PLATFORM_MAX_PATH];
+
+	// 標記優先順序: 特感 > Witch > 隊友 > 物品或武器 > 地點
+
+	int class;
+	int clientAim = GetClientViewClient(client); //ignore glow model
+	float vClientPos[3], vTargetPos[3], vClientEyePos[3];
+	GetEntPropVector(client, Prop_Data, "m_vecOrigin", vClientPos);
+	GetClientEyePosition(client, vClientEyePos);
+
+	if (1 <= clientAim <= MaxClients && IsClientInGame(clientAim))
+	{
+		if(iMarkflags & eMarkFlag_SI && GetClientTeam(clientAim) == L4D_TEAM_INFECTED && IsPlayerAlive(clientAim) && !IsPlayerGhost(clientAim))
+		{
+			bIsAimPlayer = true;
+			//PrintToChatAll("look at %N", clientAim);
+				
+			class = GetEntData(clientAim, g_iZombieClass);
+			if(class == ZC_TANK) // tank
+			{
+				class--;
+			}
+			class--;
+
+			if( ( g_bL4D2Version && class >=0 && class <=6 && ((1 << class) & g_iInfectedMarkSIFlag) ) ||
+				( !g_bL4D2Version && class >=0 && class <=3 && ((1 << class) & g_iInfectedMarkSIFlag) ) )
+			{
+				GetEntPropVector(clientAim, Prop_Data, "m_vecOrigin", vTargetPos);
+				if( IsWithInRange(vClientPos, vTargetPos, g_fInfectedMarkUseRange) && CreateInfectedMarker(client, clientAim, L4D_TEAM_SURVIVOR) == true )
+					return;
+			}
+		}
+		else if(iMarkflags & eMarkFlag_Survivors && GetClientTeam(clientAim) == L4D_TEAM_SURVIVOR && IsPlayerAlive(clientAim))
+		{
+			bIsAimPlayer = true;
+			//PrintToChatAll("look at %N", clientAim);
+			
+			GetEntPropVector(clientAim, Prop_Data, "m_vecOrigin", vTargetPos);
+			if( IsWithInRange(vClientPos, vTargetPos, g_fSurvivorMarkUseRange) && CreateSurvivorMarker(client, clientAim, L4D_TEAM_SURVIVOR) == true )
+				return;
+		}
+	}
+	else if ( iMarkflags & eMarkFlag_Witch && IsWitch(clientAim) )
+	{
+		bIsAimWitch = true;
+
+		GetEntPropVector(clientAim, Prop_Data, "m_vecOrigin", vTargetPos);
+		if( IsWithInRange(vClientPos, vTargetPos, g_fSurvivorMarkUseRange) && CreateInfectedMarker(client, clientAim, L4D_TEAM_SURVIVOR, true) == true )
+			return;
+	}
+
+	if(!bIsAimPlayer && !bIsAimWitch)
+	{
+		// 玩家的視野看到的特感或隊友 (大概)
+		// 特感與witch優先
+		float degree, degree_Lowest = 360.0;
+		int Target_FovNearBy;
+
+		if ( iMarkflags & eMarkFlag_SI )
+		{
+			Target_FovNearBy = 0;
+			if(g_fInfectedMarkSIFov > 0.0)
+			{
+				for(int i = 1; i <= MaxClients; i++)
+				{
+					if(!IsClientInGame(i)) continue;
+					if(!IsPlayerAlive(i)) continue;
+					if(GetClientTeam(i) == L4D_TEAM_INFECTED)
+					{
+						if(IsPlayerGhost(i)) continue;
+
+						class = GetEntData(i, g_iZombieClass);
+						if(class == ZC_TANK)
+						{
+							class--;
+						}
+						class--;
+
+						if( ( g_bL4D2Version && class >=0 && class <=6 && ((1 << class) & g_iInfectedMarkSIFlag) ) ||
+							( !g_bL4D2Version && class >=0 && class <=3 && ((1 << class) & g_iInfectedMarkSIFlag) ) )
+						{
+							GetClientEyePosition(i, vTargetPos);
+							if( IsWithInRange(vClientPos, vTargetPos, g_fInfectedMarkUseRange) == false ) continue;
+							// L4D2 only
+							// 判斷玩家是否對該點可看見 
+							// -使用遊戲簽證判斷，所以準確率很高
+							// -只是判斷玩家是否從正面看得見, 無法判斷玩家的背面
+							// 相較sourcemod自帶的trace快些
+							if (g_bL4D2Version && !L4D2_IsVisibleToPlayer(client, L4D_TEAM_SURVIVOR, L4D_TEAM_INFECTED, 0, vTargetPos)) continue;
+							if (!g_bL4D2Version && !IsVisibleToPlayer(vClientEyePos, i)) continue;
+
+							degree = GetFovAngle(client, i);
+							//PrintToChatAll("與%N的夾角度: %.1f", i, degree);
+							// 官方是超過45度忽略
+							if(degree > g_fInfectedMarkSIFov) continue;
+
+							if(degree < degree_Lowest)
+							{
+								degree_Lowest = degree;
+								Target_FovNearBy = i;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if(iMarkflags & eMarkFlag_Witch)
+		{
+			if(g_fInfectedMarkWitchFov > 0.0)
+			{
+				int witch = -1;
+				while( (witch = L4D_FindEntityByClassnameWithin(witch, "witch", vClientPos, g_fInfectedMarkUseRange)) != INVALID_ENT_REFERENCE )
+				{
+					GetEntPropVector(witch, Prop_Data, "m_vecOrigin", vTargetPos);
+					//PrintToChatAll("IsVisible: %d, %d", IsVisibleToEntity(vClientEyePos, vTargetPos, witch), L4D2_IsVisibleToPlayer(client, L4D_TEAM_SURVIVOR, 0, 0, vTargetPos));
+					if (g_bL4D2Version && !L4D2_IsVisibleToPlayer(client, L4D_TEAM_SURVIVOR, 0, 0, vTargetPos)) continue;
+					if (!g_bL4D2Version && !IsVisibleToEntity(vClientEyePos, vTargetPos, witch)) continue;
+				
+					degree = GetFovAngle(client, witch);
+					//PrintToChatAll("與Witch的夾角度: %.1f", degree);
+					// 官方是超過45度忽略
+					if(degree > g_fInfectedMarkWitchFov) continue;
+
+					if(degree < degree_Lowest)
+					{
+						degree_Lowest = degree;
+						Target_FovNearBy = witch;
+					}
+				}
+			}
+
+			if(Target_FovNearBy > 0)
+			{
+				if(Target_FovNearBy > MaxClients)
+				{
+					bIsAimWitch = true;
+					if( CreateInfectedMarker(client, Target_FovNearBy, L4D_TEAM_SURVIVOR, true) == true )
+						return;
+				}
+				else
+				{
+					bIsAimPlayer = true;
+					if( CreateInfectedMarker(client, Target_FovNearBy, L4D_TEAM_SURVIVOR) == true )
+						return;
+				}
+			}
+		}
+
+		// 隊友次要
+		if ( iMarkflags & eMarkFlag_Survivors && g_fSurvivorMarkFov > 0.0)
+		{
+			Target_FovNearBy = 0;
+			for(int i = 1; i <= MaxClients; i++)
+			{
+				if(!IsClientInGame(i)) continue;
+				if(!IsPlayerAlive(i)) continue;
+				if(GetClientTeam(i) == L4D_TEAM_SURVIVOR)
+				{
+					GetClientEyePosition(i, vTargetPos);
+					if( IsWithInRange(vClientPos, vTargetPos, g_fInfectedMarkUseRange) == false ) continue;
+					//if(!IsVisibleToPlayer(vClientEyePos, i)) continue;
+					if (g_bL4D2Version && !L4D2_IsVisibleToPlayer(client, L4D_TEAM_SURVIVOR, L4D_TEAM_SURVIVOR, 0, vTargetPos)) continue;
+					if (!g_bL4D2Version && !IsVisibleToPlayer(vClientEyePos, i)) continue;
+
+					degree = GetFovAngle(client, i);
+					//PrintToChatAll("與%N的夾角度: %.1f", i, degree);
+					// 官方是超過45度忽略
+					if(degree > g_fSurvivorMarkFov) continue;
+
+					if(degree < degree_Lowest)
+					{
+						degree_Lowest = degree;
+						Target_FovNearBy = i;
+					}
+				}
+			}
+
+			if(Target_FovNearBy > 0)
+			{
+				bIsAimPlayer = true;
+				if( CreateSurvivorMarker(client, Target_FovNearBy, L4D_TEAM_SURVIVOR) == true )
+					return;
+			}
+		}
+	}
+
+	int iEntity = 0;
+	if(iMarkflags & eMarkFlag_ItemsWeapons)
+	{
+		if(IsPlayerAlive(client)) iEntity = GetUseEntity(client, g_fItemUseHintRange);
+		else
+		{
+			if(clientAim > MaxClients) iEntity = clientAim;
+		}
+	}
+
+	if ( !bIsAimPlayer && !bIsAimWitch && IsValidEntityIndex(iEntity) && IsValidEntity(iEntity) && HasParentClient(iEntity) == false )
+	{
+		static char targetname[128];
+		GetEntPropString(iEntity, Prop_Data, "m_iName", targetname, sizeof(targetname));
+		if (strcmp(targetname, "harry_marked_item") == 0) //custom model
+		{
+			iEntity = GetEntPropEnt(iEntity, Prop_Data, "m_pParent");
+			if(!IsValidEntityIndex(iEntity) || !IsValidEntity(iEntity)) return;
+		}
+
+		static char classname[32];
+		if (GetEntityClassname(iEntity, classname, sizeof(classname)) 
+			&& HasEntProp(iEntity, Prop_Data, "m_ModelName")
+			&& GetEntPropString(iEntity, Prop_Data, "m_ModelName", sEntModelName, sizeof(sEntModelName)) > 1)
+		{
+			if(strncmp(classname, "prop_dynamic", 12, false) == 0)
+			{
+				int m_iEFlags = GetEntProp(iEntity, Prop_Data, "m_iEFlags");
+				if(m_iEFlags & EFL_DONTBLOCKLOS && m_iEFlags & SF_PHYSPROP_PREVENT_PICKUP)
+				{
+					//PrintToChatAll("this is attach api weapons");
+
+					// client / item / witch
+					CreateSpotMarker(client, bIsAimPlayer, L4D_TEAM_SURVIVOR);
+					return;
+				}
+			}		
+
+			//PrintToChatAll("%N is looking at %d (%s-%s)", client, iEntity, classname, sEntModelName);
+			StringToLowerCase(sEntModelName);
+			float fHeight = 10.0;
+			if (g_smModelToName.GetString(sEntModelName, sItemPhrase, sizeof(sItemPhrase)))
+			{
+				g_smModelHeight.GetValue(sEntModelName, fHeight);
+				bIsVaildItem = true;
+			}
+			else if (g_bL4D2Version && strncmp(classname, "weapon_melee", 12, false) == 0) // (custom melee model)
+			{
+				FormatEx(sItemPhrase, sizeof(sItemPhrase), "Melee");
+				fHeight = 5.0;
+
+				bIsVaildItem = true;
+			}
+			else if (strncmp(classname, "weapon_ammo_spawn", 17, false) == 0) // (custom ammo model)
+			{
+				FormatEx(sItemPhrase, sizeof(sItemPhrase), "Ammo");
+				fHeight = 10.0;
+
+				bIsVaildItem = true;
+			}
+			else if (StrContains(sEntModelName, "/weapons/") != -1) // entity is not in the list (custom weapom model)
+			{
+				FormatEx(sItemPhrase, sizeof(sItemPhrase), "Weapons");
+				fHeight = 10.0;
+
+				bIsVaildItem = true;
+			}
+			else // entity is not in the list (other entity model on the map)
+			{
+				bIsVaildItem = false;
+			}
+
+			if(bIsVaildItem)
+			{
+				if(now > g_fItemHintCoolDownTime[client])
+				{
+					NotifyMessage(client, sItemPhrase, eItemHint, L4D_TEAM_SURVIVOR);
+
+					if (strlen(g_sItemUseSound) > 0)
+					{
+						for (int player = 1; player <= MaxClients; player++)
+						{
+							if (!IsClientInGame(player))
+								continue;
+
+							if (IsFakeClient(player))
+								continue;
+
+							if (GetClientTeam(player) == L4D_TEAM_INFECTED)
+								continue;
+
+							EmitSoundToClient(player, g_sItemUseSound, client);
+						}
+					}
+
+					g_fItemHintCoolDownTime[client] = now + g_fItemHintCoolDown;
+					CreateEntityModelGlow(client, iEntity, sEntModelName, L4D_TEAM_SURVIVOR);
+					g_iClientMarkItem_EntRef[client] = EntIndexToEntRef(iEntity);
+
+					if(g_bL4D2Version && g_bItemInstructorHint)
+					{
+						float vEndPos[3];
+						GetEntPropVector(iEntity, Prop_Send, "m_vecOrigin", vEndPos);
+						vEndPos[2] = vEndPos[2] + fHeight;
+						CreateInstructorHint(client, vEndPos, sItemPhrase, iEntity, eItemHint, L4D_TEAM_SURVIVOR);
+					}
+				}
+
+				return;
+			}
+		}
+	}
+
+	// world
+	if(iMarkflags & eMarkFlag_Spots)
+	{
+		CreateSpotMarker(client, bIsAimPlayer, L4D_TEAM_SURVIVOR);
+	}
+}
+
+void PlayerMarkHint_Infected(int client)
+{
+	int iMarkflags = eMarkFlag_None;
+	if(IsPlayerAlive(client))
+	{
+		if(L4D_IsPlayerGhost(client))
+		{
+			iMarkflags = g_iInfectedTeamGhostMark;
+		}
+		else
+		{
+			iMarkflags = g_iInfectedTeamAliveMark;
+		}
+	}
+	else
+	{
+		iMarkflags = g_iInfectedTeamDeadMark;
+	}
+
+	if(iMarkflags == eMarkFlag_None) return;
+
+	float now = GetEngineTime();
+	if(g_fGlobalCoolDownTime[client] > now) return;
+	g_fGlobalCoolDownTime[client] = now + 0.2;
+
+	bool bIsAimPlayer = false;
+	static char sItemPhrase[64], sEntModelName[PLATFORM_MAX_PATH];
+
+	int clientAim = GetClientViewClient(client);
+	float vClientPos[3], vTargetPos[3], vClientEyePos[3];
+	GetEntPropVector(client, Prop_Data, "m_vecOrigin", vClientPos);
+	GetClientEyePosition(client, vClientEyePos);
+
+	// 特感標記優先權: Survivor > Item > Spot
+
+	// 1. Check crosshair target (survivor)
+	if (1 <= clientAim <= MaxClients && IsClientInGame(clientAim))
+	{
+		if(iMarkflags & eMarkFlag_Survivors && GetClientTeam(clientAim) == L4D_TEAM_SURVIVOR && IsPlayerAlive(clientAim))
+		{
+			bIsAimPlayer = true;
+			GetEntPropVector(clientAim, Prop_Data, "m_vecOrigin", vTargetPos);
+			if(IsWithInRange(vClientPos, vTargetPos, g_fSurvivorMarkUseRange) && CreateSurvivorMarker(client, clientAim, L4D_TEAM_INFECTED) == true)
+				return;
+		}
+	}
+
+	// 2. FOV scan for survivors
+	if(!bIsAimPlayer && iMarkflags & eMarkFlag_Survivors && g_fSurvivorMarkFov > 0.0)
+	{
+		float degree, degree_Lowest = 360.0;
+		int Target_FovNearBy = 0;
+
+		for(int i = 1; i <= MaxClients; i++)
+		{
+			if(!IsClientInGame(i)) continue;
+			if(!IsPlayerAlive(i)) continue;
+			if(GetClientTeam(i) == L4D_TEAM_SURVIVOR)
+			{
+				GetClientEyePosition(i, vTargetPos);
+				if(IsWithInRange(vClientPos, vTargetPos, g_fSurvivorMarkUseRange) == false) continue;
+				if (g_bL4D2Version && !L4D2_IsVisibleToPlayer(client, L4D_TEAM_INFECTED, L4D_TEAM_SURVIVOR, 0, vTargetPos)) continue;
+				if (!g_bL4D2Version && !IsVisibleToPlayer(vClientEyePos, i)) continue;
+
+				degree = GetFovAngle(client, i);
+				if(degree > g_fSurvivorMarkFov) continue;
+
+				if(degree < degree_Lowest)
+				{
+					degree_Lowest = degree;
+					Target_FovNearBy = i;
+				}
+			}
+		}
+
+		if(Target_FovNearBy > 0)
+		{
+			bIsAimPlayer = true;
+			if(CreateSurvivorMarker(client, Target_FovNearBy, L4D_TEAM_INFECTED) == true)
+				return;
+		}
+	}
+
+	// 3. Try to detect item via trace
+	if(!bIsAimPlayer && iMarkflags & eMarkFlag_ItemsWeapons)
+	{
+		float vPos[3], vAng[3];
+		GetClientEyePosition(client, vPos);
+		GetClientEyeAngles(client, vAng);
+
+		Handle trace = TR_TraceRayFilterEx(vPos, vAng, MASK_VISIBLE, RayType_Infinite, TraceFilter_InfectedItem, client);
+		bool bIsVaildItem = false;
+
+		if(TR_DidHit(trace))
+		{
+			int iEntity = TR_GetEntityIndex(trace);
+			delete trace;
+
+			if(IsValidEntityIndex(iEntity) && IsValidEntity(iEntity) && HasParentClient(iEntity) == false)
+			{
+				static char targetname[128];
+				GetEntPropString(iEntity, Prop_Data, "m_iName", targetname, sizeof(targetname));
+				if (strcmp(targetname, "harry_marked_item") == 0)
+				{
+					iEntity = GetEntPropEnt(iEntity, Prop_Data, "m_pParent");
+					if(!IsValidEntityIndex(iEntity) || !IsValidEntity(iEntity))
+					{
+						// trace hit something, targetname is harry_marked_item
+						CreateSpotMarker(client, bIsAimPlayer, L4D_TEAM_INFECTED);
+						return;
+					}
+				}
+
+				static char classname[32];
+				if(GetEntityClassname(iEntity, classname, sizeof(classname))
+					&& HasEntProp(iEntity, Prop_Data, "m_ModelName")
+					&& GetEntPropString(iEntity, Prop_Data, "m_ModelName", sEntModelName, sizeof(sEntModelName)) > 1)
+				{
+					if(strncmp(classname, "prop_dynamic", 12, false) == 0)
+					{
+						int m_iEFlags = GetEntProp(iEntity, Prop_Data, "m_iEFlags");
+						if(m_iEFlags & EFL_DONTBLOCKLOS && m_iEFlags & SF_PHYSPROP_PREVENT_PICKUP)
+						{
+							// trace hit something, classname is prop_dynamic
+							CreateSpotMarker(client, bIsAimPlayer, L4D_TEAM_INFECTED);
+							return;
+						}
+					}
+
+					StringToLowerCase(sEntModelName);
+					float fHeight = 10.0;
+					if (g_smModelToName.GetString(sEntModelName, sItemPhrase, sizeof(sItemPhrase)))
+					{
+						g_smModelHeight.GetValue(sEntModelName, fHeight);
+						bIsVaildItem = true;
+					}
+					else if (g_bL4D2Version && strncmp(classname, "weapon_melee", 12, false) == 0)
+					{
+						FormatEx(sItemPhrase, sizeof(sItemPhrase), "Melee");
+						fHeight = 5.0;
+						bIsVaildItem = true;
+					}
+					else if (strncmp(classname, "weapon_ammo_spawn", 17, false) == 0)
+					{
+						FormatEx(sItemPhrase, sizeof(sItemPhrase), "Ammo");
+						fHeight = 10.0;
+						bIsVaildItem = true;
+					}
+					else if (StrContains(sEntModelName, "/weapons/") != -1)
+					{
+						FormatEx(sItemPhrase, sizeof(sItemPhrase), "Weapons");
+						fHeight = 10.0;
+						bIsVaildItem = true;
+					}
+
+					if(bIsVaildItem)
+					{
+						if(now > g_fItemHintCoolDownTime[client])
+						{
+							NotifyMessage(client, sItemPhrase, eItemHint, L4D_TEAM_INFECTED);
+
+							if (strlen(g_sItemUseSound) > 0)
+							{
+								for (int player = 1; player <= MaxClients; player++)
+								{
+									if (!IsClientInGame(player) || IsFakeClient(player)) continue;
+
+									if(GetClientTeam(player) != L4D_TEAM_INFECTED) continue;
+
+									EmitSoundToClient(player, g_sItemUseSound, client);
+								}
+							}
+
+							g_fItemHintCoolDownTime[client] = now + g_fItemHintCoolDown;
+							CreateEntityModelGlow(client, iEntity, sEntModelName, L4D_TEAM_INFECTED);
+
+							if(g_bL4D2Version && g_bItemInstructorHint)
+							{
+								float vEndPos[3];
+								GetEntPropVector(iEntity, Prop_Send, "m_vecOrigin", vEndPos);
+								vEndPos[2] = vEndPos[2] + fHeight;
+								CreateInstructorHint(client, vEndPos, sItemPhrase, iEntity, eItemHint, L4D_TEAM_INFECTED);
+							}
+						}
+
+						return;
+					}
+				}
+			}
+		}
+
+		delete trace;
+	}
+
+	// 4. Fallback: spot marker
+	if(iMarkflags & eMarkFlag_Spots)
+	{
+		// world
+		CreateSpotMarker(client, bIsAimPlayer, L4D_TEAM_INFECTED);
+	}
+}
+
+bool TraceFilter_InfectedItem(int entity, int contentsMask, int client)
+{
+	if (entity == client)
+		return false;
+
+	if (entity == ENTITY_WORLDSPAWN)
+		return true;
+
+	if (1 <= entity <= MaxClients && IsClientInGame(entity))
+		return false;
+
+	return ge_bInvalidTrace[entity] ? false : true;
+}
+
+void RemoveGlowAndInstructor(int entity, int iMarkerTeam = 0)
+{
+	if(iMarkerTeam == 0)
+	{
+		for(int team = L4D_TEAM_SURVIVOR; team <= L4D_TEAM_INFECTED; team++)
+		{
+			RemoveEntityModelGlow(entity, team);
+			delete g_iModelTimer[entity][team-2];
+
+			RemoveInstructor(entity, team);
+			delete g_iInstructorTimer[entity][team-2];
+
+			RemoveInfoTarget(entity, team);
+			delete g_iInfoTargetTimer[entity][team-2];
+
+			g_iMarkedByMultiPlayer_Flag[entity][team-2] = 0;
+		}
+	}
+	else
+	{
+		RemoveEntityModelGlow(entity, iMarkerTeam);
+		delete g_iModelTimer[entity][iMarkerTeam-2];
+
+		RemoveInstructor(entity, iMarkerTeam);
+		delete g_iInstructorTimer[entity][iMarkerTeam-2];
+
+		RemoveInfoTarget(entity, iMarkerTeam);
+		delete g_iInfoTargetTimer[entity][iMarkerTeam-2];
+
+		g_iMarkedByMultiPlayer_Flag[entity][iMarkerTeam-2] = 0;
+	}
+
+	ge_bMoveUp[entity] = false;
+	g_iMarkerTeam[entity] = 0;
+	g_iEntCreator[entity] = 0;
+}
+
+bool IsWithInRange(float vStartPos[3], float vEndPos[3], float fDistance)
+{
+	if (GetVectorDistance(vStartPos, vEndPos, true) > fDistance * fDistance) // over distance
+		return false;
+
+	return true;
+}
+
+float GetFovAngle(int client, int target)
+{
+	float start[3], end[3], entdir[3], facedir[3];
+
+	GetClientEyePosition(client, start);
+	GetClientEyeAngles(client, facedir); // as a temp vec
+	GetAngleVectors(facedir, facedir, NULL_VECTOR, NULL_VECTOR);
+	NormalizeVector(facedir, facedir);
+
+	if(target > MaxClients) GetEntPropVector(target, Prop_Data, "m_vecOrigin", end);
+	else GetClientEyePosition(target, end);
+	SubtractVectors(end, start, entdir); // client --> entity
+	NormalizeVector(entdir, entdir);
+
+	//兩向量 求夾角
+	//θ = arccos((A ⋅ B) / (|A| |B|))
+	return RadToDeg(ArcCosine(GetVectorDotProduct(entdir, facedir) / (1*1)));
+}
+
+float  g_fVPlayerMins[3] = {-16.0, -16.0,  0.0};
+float  g_fVPlayerMaxs[3] = { 16.0,  16.0, 71.0};
+stock bool IsVisibleToPlayer(float vClientEyePos[3], int target)
+{
+    float vTargetPos[3];
+    float vLookAt[3];
+    float vAng[3];
+
+    GetClientEyePosition(target, vTargetPos);
+    MakeVectorFromPoints(vClientEyePos, vTargetPos, vLookAt);
+    GetVectorAngles(vLookAt, vAng);
+
+	// MASK_PLAYERSOLID -> MASK_VISIBLE
+    Handle trace = TR_TraceRayFilterEx(vClientEyePos, vAng, MASK_VISIBLE, RayType_Infinite, TraceFilter_VisibleToPlayer, target);
+
+    bool isVisible;
+
+    if (TR_DidHit(trace))
+    {
+        isVisible = (TR_GetEntityIndex(trace) == target);
+
+        if (!isVisible)
+        {
+            vTargetPos[2] -= 62.0; // results the same as GetClientAbsOrigin
+
+            delete trace;
+			// MASK_PLAYERSOLID -> MASK_VISIBLE
+            trace = TR_TraceHullFilterEx(vClientEyePos, vTargetPos, g_fVPlayerMins, g_fVPlayerMaxs, MASK_VISIBLE, TraceFilter_VisibleToPlayer, target);
+
+            if (TR_DidHit(trace))
+			{
+                isVisible = (TR_GetEntityIndex(trace) == target);
+			}
+        }
+    }
+
+    delete trace;
+
+    return isVisible;
+}
+
+bool TraceFilter_VisibleToPlayer(int entity, int contentsMask, int player)
+{
+    if (entity == player)
+        return true;
+
+    if (IsValidClientIndex(entity))
+        return false;
+
+    if (!IsValidEntityIndex(entity) )
+        return false;
+
+    return ge_bInvalidTrace[entity] ? false : true;
+}
+
+bool IsVisibleToEntity(float vClientEyePos[3], float vTargetPos[3], int witch)
+{
+	// MASK_SOLID_BRUSHONLY -> MASK_VISIBLE
+	Handle hTrace = TR_TraceRayFilterEx(vClientEyePos, vTargetPos, MASK_VISIBLE, RayType_EndPoint, TraceFilter_VisibleToEntity, witch);
+	
+	if (TR_DidHit(hTrace))
+	{
+		delete hTrace;
+		return false;
+	}
+	
+	delete hTrace;
+	return true;
+}
+
+bool TraceFilter_VisibleToEntity(int entity, int contentsMask, int witch)
+{
+	if (entity == 0)
+		return true;
+
+	if (entity == witch)
+		return false;
+
+	if (IsValidClientIndex(entity))
+		return false;
+
+	return ge_bInvalidTrace[entity] ? false : true;
+}
+
+bool IsValidClientIndex(int client)
+{
+    return (1 <= client <= MaxClients);
+}
+
+bool CreateParticle(float fPos[3], const char[] particleType, float time, int iMarkerTeam)
+{
+	#pragma unused iMarkerTeam
+
+	int particle = CreateEntityByName("info_particle_system");
+	if (!CheckIfEntitySafe(particle)) return false;
+
+	// not working
+	//g_iMarkerTeam[particle] = iMarkerTeam;
+	//SDKHook(particle, SDKHook_SetTransmit, Hook_SetTransmit_MarkerTeam);
+
+	static char sValues[32];
+	TeleportEntity(particle, fPos, NULL_VECTOR, NULL_VECTOR);
+	DispatchKeyValue(particle, "targetname", "l4d2_particle");
+	DispatchKeyValue(particle, "effect_name", particleType);
+	DispatchSpawn(particle);
+	AcceptEntityInput(particle, "SetParent", particle, particle, 0);
+	ActivateEntity(particle);
+	AcceptEntityInput(particle, "start");
+
+	FormatEx(sValues, sizeof(sValues), "OnUser1 !self:Kill::%f:1", time);
+	SetVariantString(sValues);
+	AcceptEntityInput(particle, "AddOutput");
+	AcceptEntityInput(particle, "FireUser1");
+
+	return true;
+}
+
+void PrecacheParticle(const char[] sEffectName)
+{
+	static int table = INVALID_STRING_TABLE;
+	if( table == INVALID_STRING_TABLE )
+	{
+		table = FindStringTable("ParticleEffectNames");
+	}
+
+	if( FindStringIndex(table, sEffectName) == INVALID_STRING_INDEX )
+	{
+		bool save = LockStringTables(false);
+		AddToStringTable(table, sEffectName);
+		LockStringTables(save);
+	}
+}
+
+void RemoveClientCreation(int client, int &EntRef)
+{
+	int entity = EntRefToEntIndex(EntRef);
+	if(entity != INVALID_ENT_REFERENCE && g_iEntCreator[entity] == client)
+	{
+		RemoveEntity(entity);
+	}
+	EntRef = -1;
+}
+
+// LMC--------------
+
+int GetLMCModel(int client)
+{
+    if(bLMC_Available)
+    {
+        int iEntity = LMC_GetClientOverlayModel(client);
+        //PrintToChatAll("%N - %d", client, iEntity);
+        if(iEntity > MaxClients)
+        {
+            return iEntity;
+        }
+    }
+
+    return 0;
+}

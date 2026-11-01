@@ -1,0 +1,165 @@
+{
+  "SchemaVersion": 1,
+  "Game": {
+    "AppId": 222860,
+    "Architecture": "Windows-x86",
+    "TestedBuild": 23990100,
+    "TestedVersion": "2.2.4.3",
+    "ServerDllSha256": "a93ec916a8f26fbea85688c321d2ba8dd346d435fab09a0b926dd950c2e1ea12"
+  },
+  "CompilerSha256": "d30effb58895a1282bf8256e689446a664a831344221a12ef0d9732a38966557",
+  "Packages": [
+    {
+      "Id": "steamcmd",
+      "Version": "bootstrap-verified-2026-10-31",
+      "Name": "steamcmd.zip",
+      "Url": "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip",
+      "Sha256": "7669b170dee42db8ee2273775ed7dfb2d173bdba1b849f70d2c7b379290bce13",
+      "Bytes": 774825,
+      "Kind": "bootstrap",
+      "DestinationPrefix": "",
+      "Destination": "",
+      "Exclude": []
+    },
+    {
+      "Id": "metamod",
+      "Version": "1.11.0.1163",
+      "Name": "mmsource-1.11.0-git1163-windows.zip",
+      "Url": "https://mms.alliedmods.net/mmsdrop/1.11/mmsource-1.11.0-git1163-windows.zip",
+      "Sha256": "68a46cc50f092c078a4d9b8fff53297a51e8fe86e26bcb6a6c4b51a91574bcf3",
+      "Bytes": 2969358,
+      "Kind": "zip",
+      "DestinationPrefix": "left4dead2",
+      "Destination": "",
+      "Exclude": [
+        "addons/metamod_x64.vdf"
+      ]
+    },
+    {
+      "Id": "sourcemod",
+      "Version": "1.12.0.7259",
+      "Name": "sourcemod-1.12.0-git7259-windows.zip",
+      "Url": "https://github.com/alliedmodders/sourcemod/releases/download/1.12.0.7259/sourcemod-1.12.0-git7259-windows.zip",
+      "Sha256": "5711ce719fa2f3fa4a762702f55c7906aa951690c739499beb5f2b62a9161362",
+      "Bytes": 64185186,
+      "Kind": "zip",
+      "DestinationPrefix": "left4dead2",
+      "Destination": "",
+      "Exclude": [
+        "addons/sourcemod/plugins/nextmap.smx"
+      ]
+    },
+    {
+      "Id": "left4lib",
+      "Version": "1.5.3",
+      "Name": "Left4Lib-v1.5.3.vpk",
+      "Url": "https://github.com/smilz0/Left4Lib/releases/download/v1.5.3/Left4Lib.vpk",
+      "Sha256": "26b4169dc12422c1374e9fae8bbddd8f973f9307be71912011600a03f9ce6ad8",
+      "Bytes": 201405,
+      "Kind": "file",
+      "DestinationPrefix": "",
+      "Destination": "left4dead2/addons/left4lib.vpk",
+      "Exclude": []
+    },
+    {
+      "Id": "left4bots",
+      "Version": "2.3.11",
+      "Name": "Left4Bots2-v2.3.11.vpk",
+      "Url": "https://github.com/smilz0/Left4Bots/releases/download/v2.3.11/Left4Bots2.vpk",
+      "Sha256": "9d9c5c1d8c218512daa489256b4af7b72f120f6243e3be9e6de1e4abca30e7fb",
+      "Bytes": 703335,
+      "Kind": "file",
+      "DestinationPrefix": "",
+      "Destination": "left4dead2/addons/left4bots2.vpk",
+      "Exclude": []
+    },
+    {
+      "Id": "acs",
+      "Version": "2.3.0",
+      "Name": "acs_v2.3.0.zip",
+      "Url": "https://github.com/rikka0w0/l4d2_mission_manager/releases/download/v2.3.0/acs_v2.3.0.zip",
+      "Sha256": "d63927dd50e3d1b2d68836029056e5dc8ded743f02e283eba518580ef8f6548f",
+      "Bytes": 95109,
+      "Kind": "zip",
+      "DestinationPrefix": "left4dead2/addons/sourcemod",
+      "Destination": "",
+      "Exclude": [
+        "plugins/l4d2_mm_adminmenu.smx",
+        "scripting/l4d2_mm_adminmenu.sp"
+      ]
+    }
+  ],
+  "BundledComponents": [
+    {
+      "Id": "left4dhooks",
+      "Version": "1.174",
+      "Repository": "https://github.com/SilvDev/Left4DHooks",
+      "Commit": "bbae91ec596d042e4b092c4f28deab4f0ed9284d",
+      "License": "GPL-3.0-only"
+    },
+    {
+      "Id": "path-to-goal",
+      "Version": "1.91",
+      "Repository": "https://codeberg.org/gvazdas/l4d2_zombie_master",
+      "Commit": "3a6a451bc560beda31f18e77f99d20f8d210a666",
+      "License": "GPL-3.0-or-later"
+    },
+    {
+      "Id": "item-hint",
+      "Version": "5.5",
+      "Repository": "https://github.com/fbef0102/L4D1_2-Plugins",
+      "Commit": "5df7a57cf18c97b7fbc5a8f6626b41ca2a9acc76",
+      "License": "GPL-3.0-only"
+    },
+    {
+      "Id": "weapon-drop",
+      "Version": "1.13",
+      "Repository": "https://github.com/fbef0102/L4D1_2-Plugins",
+      "Commit": "5df7a57cf18c97b7fbc5a8f6626b41ca2a9acc76",
+      "License": "GPL-3.0-only"
+    },
+    {
+      "Id": "who-called-horde",
+      "Version": "1.1-2023/6/20",
+      "Repository": "https://github.com/fbef0102/L4D1_2-Plugins",
+      "Commit": "5df7a57cf18c97b7fbc5a8f6626b41ca2a9acc76",
+      "License": "GPL-3.0-only"
+    },
+    {
+      "Id": "use-priority",
+      "Version": "2.6",
+      "Source": "https://forums.alliedmods.net/attachment.php?attachmentid=188692&d=1714942373",
+      "License": "GPL-3.0-or-later"
+    },
+    {
+      "Id": "multicolors",
+      "Version": "pinned-5df7a57",
+      "Repository": "https://github.com/fbef0102/L4D1_2-Plugins",
+      "Commit": "5df7a57cf18c97b7fbc5a8f6626b41ca2a9acc76",
+      "License": "GPL-3.0-only"
+    }
+  ],
+  "KeepLaser": {
+    "Id": "keep-laser",
+    "Version": "1.4",
+    "Name": "l4d2_keeplasers.sp",
+    "Url": "https://forums.alliedmods.net/attachment.php?attachmentid=200229&d=1681243413",
+    "Sha256": "079ee767a098e95370b605f87497db7ad269bc0d81c33ac8acf706a47bdb3aab",
+    "Bytes": 14531,
+    "Kind": "source",
+    "DestinationPrefix": "",
+    "Destination": "",
+    "Exclude": []
+  },
+  "RuntimePluginNames": [
+    "[L4D & L4D2] Left 4 DHooks Direct",
+    "[L4D1/L4D2] Path To Goal",
+    "L4D2 Item hint",
+    "[L4D1/2] Weapon Drop",
+    "[L4D & L4D2] Use Priority Patch",
+    "[L4D & L4D2] trigger horde notify",
+    "Automatic Campaign Switcher (ACS)",
+    "L4D2 Mission Manager",
+    "l4d2_changelevel"
+  ]
+}

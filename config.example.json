@@ -1,0 +1,11 @@
+{
+  "SchemaVersion": 1,
+  "KitId": null,
+  "ServerRoot": "runtime\\server",
+  "ListenIPv4": null,
+  "Port": 27016,
+  "StartMap": "c8m1_apartment",
+  "Profile": "casual",
+  "Hostname": "L4D2 LAN Kit",
+  "EnableKeepLaser": false
+}
