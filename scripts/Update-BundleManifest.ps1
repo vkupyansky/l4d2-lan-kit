@@ -1,7 +1,12 @@
 #requires -Version 5.1
+[CmdletBinding()]
+param([string] $EntryScript)
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if ([string]::IsNullOrWhiteSpace($EntryScript)) { $EntryScript = $PSCommandPath }
+if ([string]::IsNullOrWhiteSpace($EntryScript)) { throw 'EntryScript is required for the manifest command interface.' }
+$root = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($EntryScript))) '..'))
 $manifestPath = Join-Path $root 'metadata\bundle.json'
 $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
 $files = @()
@@ -17,6 +22,6 @@ $files += Get-Item -LiteralPath (Join-Path $root 'metadata\dependencies.json')
 $manifest.Files = @($files | ForEach-Object {
     [ordered]@{ Path = $_.FullName.Substring($root.TrimEnd('\', '/').Length + 1).Replace('\', '/'); Bytes = $_.Length; Sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
 })
-$json = ($manifest | ConvertTo-Json -Depth 30) + [Environment]::NewLine
+$json = ($manifest | ConvertTo-Json -Depth 30).Replace("`r`n", "`n") + "`n"
 [IO.File]::WriteAllText($manifestPath, $json, [Text.UTF8Encoding]::new($false))
 Write-Host ("Updated {0} bundle file hashes." -f $manifest.Files.Count)

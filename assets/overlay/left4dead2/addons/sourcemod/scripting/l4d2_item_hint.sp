@@ -1,5 +1,6 @@
 //fdxx, BHaType	@ 2021
 //Harry @ 2022-2026
+// Modified 2026-11-08: removed an account-specific connection ban.
 
 
 #pragma semicolon 1
@@ -481,7 +482,6 @@ public void OnPluginStart()
 			if (IsClientInGame(i))
 			{
 				OnClientPutInServer(i);
-				OnClientPostAdminCheck(i);
 			}
 		}
 
@@ -843,20 +843,6 @@ public void OnClientPutInServer(int client)
 	SDKHook(client, SDKHook_WeaponEquipPost, OnWeaponEquipPost);
 }
 
-public void OnClientPostAdminCheck(int client)
-{
-	if(IsFakeClient(client)) return;
-	
-	static char steamid[32];
-	if(GetClientAuthId(client, AuthId_SteamID64, steamid, sizeof(steamid), true) == false) return;
-
-	// forums.alliedmods.net/showthread.php?t=348125
-	if(strcmp(steamid, "76561198835850999", false) == 0)
-	{
-		KickClient(client, "Mentally retarded, go fk yourself");
-		return;
-	}
-}
 
 void OnWeaponEquipPost(int client, int weapon)
 {

@@ -18,6 +18,7 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) { $ConfigPath = Join-Path $KitRoo
 $ConfigPath = [IO.Path]::GetFullPath($ConfigPath)
 $Utf8 = [Text.UTF8Encoding]::new($false)
 $RuntimeLock = $null
+$script:RoundReady = $false
 
 function Read-Json([string] $Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Missing file: $Path" }
@@ -29,7 +30,7 @@ function Write-AtomicText([string] $Path, [string] $Text) {
     $temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.partial'
     try {
         [IO.File]::WriteAllText($temporary, $Text, $Utf8)
-        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temporary, $Path, $null) }
+        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temporary, $Path, [System.Management.Automation.Language.NullString]::Value) }
         else { [IO.File]::Move($temporary, $Path) }
     }
     finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force } }
@@ -304,7 +305,7 @@ function Set-LaunchConfiguration($Network) {
 
 function Build-Plugins([string] $Stage, [string] $Compiler, [bool] $KeepLaser) {
     $sm = Join-Path $Stage 'left4dead2\addons\sourcemod'
-    $names = @('left4dhooks', 'l4d_path_to_goal', 'l4d2_item_hint', 'l4d_drop', 'l4d_use_priority', 'trigger_horde_notify')
+    $names = @('left4dhooks', 'l4d_path_to_goal', 'l4d2_item_hint', 'l4d_drop', 'l4d_use_priority', 'trigger_horde_notify', 'l4d2_lan_horde_limits')
     if ($KeepLaser) { $names += 'l4d2_keeplasers' }
     foreach ($name in $names) {
         $source = Join-Path $sm ('scripting\' + $name + '.sp')
@@ -378,32 +379,70 @@ function Remove-DisabledOptionalLaser {
     Remove-Item -LiteralPath $active -Force
 }
 
+function Install-SteamServer([string] $SteamcmdDirectory) {
+    $steamcmd = Join-Path $SteamcmdDirectory 'steamcmd.exe'
+    $steamLog = Join-Path $RuntimeRoot 'steamcmd-install.log'
+    $successPattern = "(?m)^Success!\s+App '222860' (fully installed|already up to date)\.?\s*$"
+    $missingPattern = "^\s*ERROR!\s+Failed to install app '222860' \(Missing configuration\)\.?\s*$"
+    Push-Location $SteamcmdDirectory
+    try {
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            [IO.File]::WriteAllText($steamLog, '', $Utf8)
+            & $steamcmd '+force_install_dir' $ServerRoot '+login' 'anonymous' '+app_info_print' '222860' '+app_update' '222860' 'validate' '+quit' | Tee-Object -FilePath $steamLog | Out-Host
+            $exitCode = $LASTEXITCODE
+            $output = [IO.File]::ReadAllText($steamLog)
+            if ($exitCode -eq 0 -and $output -match $successPattern) {
+                Assert-ServerBinary
+                return
+            }
+            $failures = @(($output -split "`r?`n") | Where-Object {
+                $_ -match '^\s*(ERROR[!:]|FATAL\b|FAILED\b)' -or
+                $_ -match '^\s*(Connecting anonymously|Waiting for|Logging in).*\bFAILED\b'
+            })
+            $missingConfiguration = $exitCode -eq 7 -and $failures.Count -eq 1 -and $failures[0] -match $missingPattern
+            if (-not $missingConfiguration -or $attempt -eq 3) {
+                if ($exitCode -eq 0) { throw "SteamCMD did not confirm successful app installation. Inspect $steamLog." }
+                throw "SteamCMD failed with exit code $exitCode. Inspect $steamLog."
+            }
+            Write-Host ('SteamCMD reported Missing configuration; refreshing app metadata and retrying ({0}/3).' -f ($attempt + 1))
+            Start-Sleep -Seconds ([int][Math]::Pow(2, $attempt))
+        }
+    }
+    finally { Pop-Location }
+}
+
 function Install-Kit {
     $network = Resolve-Network $Configuration
     Assert-Stopped
+    Assert-NoReparse $RuntimeRoot
+    Assert-NoReparse $DownloadRoot
     $ownerPath = Join-Path $ServerRoot '.lan-kit-owner.json'
+    $serverOwned = $false
     if (Test-Path -LiteralPath $ownerPath) {
         $owner = Read-Json $ownerPath
         if ($owner.KitId -cne $Configuration.KitId) { throw 'ServerRoot belongs to another installation.' }
+        $serverOwned = $true
     }
     elseif (Test-Path -LiteralPath $ServerRoot) {
         if (@(Get-ChildItem -LiteralPath $ServerRoot -Force).Count -gt 0) { throw 'ServerRoot is not empty and has no kit ownership marker. Existing files were not changed.' }
+    }
+    $runtimeOwnerPath = Join-Path $RuntimeRoot '.lan-kit-runtime.json'
+    if (Test-Path -LiteralPath $runtimeOwnerPath) {
+        if ((Read-Json $runtimeOwnerPath).KitId -cne $Configuration.KitId) { throw 'The runtime directory belongs to another installation.' }
+    }
+    elseif (Test-Path -LiteralPath $RuntimeRoot) {
+        $allowed = @{}
+        foreach ($package in @($Metadata.Dependencies.Packages) + @($Metadata.Dependencies.KeepLaser)) { $allowed[$package.Name] = $package.Sha256 }
+        foreach ($file in @(Get-ChildItem -LiteralPath $RuntimeRoot -File -Recurse -Force)) {
+            # An interrupted bootstrap can own these files before its runtime marker exists.
+            if ($serverOwned -and ($file.FullName -ieq $ownerPath -or ($file.FullName -ieq (Join-Path $ServerRoot '.lan-kit.lock') -and $file.Length -eq 0))) { continue }
+            if ($file.DirectoryName -ine $DownloadRoot -or -not $allowed.ContainsKey($file.Name) -or (Get-Sha $file.FullName) -ne $allowed[$file.Name]) { throw 'An unknown runtime file exists. It was not executed or overwritten.' }
+        }
     }
     $null = New-Item -ItemType Directory -Path $ServerRoot -Force
     $lock = [IO.File]::Open((Join-Path $ServerRoot '.lan-kit.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     try {
         if (-not (Test-Path -LiteralPath $ownerPath)) { Write-Json $ownerPath @{ SchemaVersion = 1; KitId = $Configuration.KitId } }
-        $runtimeOwnerPath = Join-Path $RuntimeRoot '.lan-kit-runtime.json'
-        if (Test-Path -LiteralPath $runtimeOwnerPath) {
-            if ((Read-Json $runtimeOwnerPath).KitId -cne $Configuration.KitId) { throw 'The runtime directory belongs to another installation.' }
-        }
-        elseif (Test-Path -LiteralPath $RuntimeRoot) {
-            $allowed = @{}
-            foreach ($package in @($Metadata.Dependencies.Packages) + @($Metadata.Dependencies.KeepLaser)) { $allowed[$package.Name] = $package.Sha256 }
-            foreach ($file in @(Get-ChildItem -LiteralPath $RuntimeRoot -File -Recurse -Force)) {
-                if ($file.DirectoryName -ine $DownloadRoot -or -not $allowed.ContainsKey($file.Name) -or (Get-Sha $file.FullName) -ne $allowed[$file.Name]) { throw 'An unknown runtime file exists. It was not executed or overwritten.' }
-            }
-        }
         Write-Json $runtimeOwnerPath @{ SchemaVersion = 1; KitId = $Configuration.KitId }
         $paths = @{}
         foreach ($package in $Metadata.Dependencies.Packages) { $paths[$package.Id] = Get-Download $package }
@@ -436,15 +475,7 @@ function Install-Kit {
             if (-not (Test-Path -LiteralPath $steamcmd)) { Expand-Package $paths.steamcmd $steamcmdDirectory @() }
             Write-Host 'SteamCMD will download and validate official app 222860. This can take several minutes.'
             Assert-Stopped
-            Push-Location $steamcmdDirectory
-            try {
-                $steamLog = Join-Path $RuntimeRoot 'steamcmd-install.log'
-                & $steamcmd '+force_install_dir' $ServerRoot '+login' 'anonymous' '+app_update' '222860' 'validate' '+quit' | Tee-Object -FilePath $steamLog | Out-Host
-                if ($LASTEXITCODE -ne 0) { throw "SteamCMD failed with exit code $LASTEXITCODE." }
-                if ([IO.File]::ReadAllText($steamLog) -notmatch "Success!\s+App '222860' (fully installed|already up to date)") { throw 'SteamCMD did not confirm successful app installation. Inspect runtime/steamcmd-install.log.' }
-            }
-            finally { Pop-Location }
-            Assert-ServerBinary
+            Install-SteamServer $steamcmdDirectory
             $plan = @(Get-StagePlan $stage)
             Assert-Stopped
             Remove-DisabledOptionalLaser
@@ -454,7 +485,7 @@ function Install-Kit {
                 $temporary = $operation.Target + '.' + [guid]::NewGuid().ToString('N') + '.partial'
                 Copy-Item -LiteralPath $operation.Source -Destination $temporary
                 if ((Get-Sha $temporary) -ne $operation.Sha256) { throw 'Staged copy hash failed.' }
-                if (Test-Path -LiteralPath $operation.Target) { [IO.File]::Replace($temporary, $operation.Target, $null) }
+                if (Test-Path -LiteralPath $operation.Target) { [IO.File]::Replace($temporary, $operation.Target, [System.Management.Automation.Language.NullString]::Value) }
                 else { [IO.File]::Move($temporary, $operation.Target) }
             }
             Set-RuntimePermissions
@@ -495,15 +526,35 @@ function Read-NewLog([string] $Path, [long] $Offset) {
     try {
         $start = [Math]::Max(0, $Offset)
         if ($start -gt $stream.Length) { $start = 0 }
-        $start = [Math]::Max($start, $stream.Length - 262144)
-        $null = $stream.Seek($start, [IO.SeekOrigin]::Begin)
-        $reader = [IO.StreamReader]::new($stream, $Utf8)
-        try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+        $available = $stream.Length - $start
+        if ($available -eq 0) { return '' }
+        $spans = @(@{ Offset = $start; Bytes = [Math]::Min($available, 262144) })
+        if ($available -gt 262144) {
+            # Keep startup markers and recent errors within one bounded read budget.
+            $spans = @(@{ Offset = $start; Bytes = 131072 }, @{ Offset = $stream.Length - 131071; Bytes = 131071 })
+        }
+        $parts = @()
+        foreach ($span in $spans) {
+            $null = $stream.Seek($span.Offset, [IO.SeekOrigin]::Begin)
+            $buffer = [byte[]]::new([int]$span.Bytes)
+            $received = 0
+            while ($received -lt $buffer.Length) {
+                $read = $stream.Read($buffer, $received, $buffer.Length - $received)
+                if ($read -eq 0) { break }
+                $received += $read
+            }
+            $memory = [IO.MemoryStream]::new($buffer, 0, $received, $false)
+            $reader = [IO.StreamReader]::new($memory, $Utf8)
+            try { $parts += $reader.ReadToEnd() } finally { $reader.Dispose() }
+        }
+        return ($parts -join "`n")
     }
     finally { $stream.Dispose() }
 }
 
+# A ready listener can await its first player; RoundReady confirms full round initialization.
 function Check-Kit([bool] $RequireRunning, [bool] $AllowPending = $false) {
+    $script:RoundReady = $false
     Assert-ServerBinary
     if (-not $AllowPending) { Assert-InstalledArtifacts }
     $task = Get-OwnedTask
@@ -548,6 +599,7 @@ function Check-Kit([bool] $RequireRunning, [bool] $AllowPending = $false) {
             if ($process.ProcessId -eq $run.ReadyPid -and $process.CreationDate.ToUniversalTime().ToString('o') -ceq $run.ReadyCreationUtc) { $verified = $true }
         }
     }
+    $script:RoundReady = $verified
     if (-not $verified) {
         $missing = @()
         foreach ($name in $Metadata.Dependencies.RuntimePluginNames) {
@@ -555,13 +607,21 @@ function Check-Kit([bool] $RequireRunning, [bool] $AllowPending = $false) {
         }
         if ($Configuration.EnableKeepLaser -and $log -notmatch '(?m)^\s*\d+\s+"L4D2 Keep Lasers"\s+\(') { $missing += 'L4D2 Keep Lasers' }
         if ($log -notmatch 'L4D2_LAN_KIT_CONFIG_READY') { $missing += 'server configuration marker' }
-        if ($log -notmatch 'L4D2_LAN_KIT_BOTS_READY') { $missing += 'bot initialization marker' }
+        $botsReady = $log -match 'L4D2_LAN_KIT_BOTS_READY'
+        $hordeReady = $log -match '(?m)^\[LAN HORDE\] coop=1 common=[1-9]\d* mob=[1-9]\d*-[1-9]\d* mega=[1-9]\d*; scripted timer floors=6/10 seconds\s*$'
+        $idleListening = $log -match '(?m)^players\s*:\s*0 humans,\s*\d+ bots[^\r\n]*\(hibernating\)' -and $log -notmatch 'Server waking up from hibernation'
+        if (-not $idleListening) {
+            if (-not $botsReady) { $missing += 'bot initialization marker' }
+            if (-not $hordeReady) { $missing += 'horde profile initialization marker' }
+        }
         if ($missing.Count -gt 0) {
             if ($AllowPending) { return $false }
             throw ('Initialization was not confirmed: ' + ($missing -join ', ') + '. Start through Start.cmd and inspect console.log.')
         }
+        $script:RoundReady = $botsReady -and $hordeReady
     }
-    Write-Host ('Server running. Connect from both clients: connect {0}:{1}' -f $owned[0].LocalAddress, $Configuration.Port)
+    if ($script:RoundReady) { Write-Host ('Server running. Connect from both clients: connect {0}:{1}' -f $owned[0].LocalAddress, $Configuration.Port) }
+    else { Write-Host ('Server listening; round initialization waits for the first player. Connect: connect {0}:{1}' -f $owned[0].LocalAddress, $Configuration.Port) }
     Write-Host ('Console log: ' + (Join-Path $ServerRoot 'left4dead2\console.log'))
     return $true
 }
@@ -635,11 +695,13 @@ try {
                 Start-Sleep -Seconds 1
             }
             if (-not $ready) { $null = Check-Kit $true }
-            $process = @(Get-CimInstance Win32_Process -Filter "Name = 'srcds.exe'" | Where-Object { $_.ExecutablePath -ieq $ServerExe })
-            if ($process.Count -ne 1) { throw 'The ready process was not uniquely identified.' }
-            $run.ReadyPid = $process[0].ProcessId
-            $run.ReadyCreationUtc = $process[0].CreationDate.ToUniversalTime().ToString('o')
-            Write-Json (Join-Path $ServerRoot '.lan-kit-run.json') $run
+            if ($script:RoundReady) {
+                $process = @(Get-CimInstance Win32_Process -Filter "Name = 'srcds.exe'" | Where-Object { $_.ExecutablePath -ieq $ServerExe })
+                if ($process.Count -ne 1) { throw 'The ready process was not uniquely identified.' }
+                $run.ReadyPid = $process[0].ProcessId
+                $run.ReadyCreationUtc = $process[0].CreationDate.ToUniversalTime().ToString('o')
+                Write-Json (Join-Path $ServerRoot '.lan-kit-run.json') $run
+            }
         }
         elseif ($Action -eq 'Check') { $null = Check-Kit $false }
     }

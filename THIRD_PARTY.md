@@ -1,6 +1,6 @@
 # Third-party components
 
-The [MIT license](LICENSE) covers L4D2 LAN Kit's independent installer code, templates, and documentation. Third-party components and derivative changes retain their original licenses and credits. MIT does not cover game content or third-party add-ons.
+The [MIT license](LICENSE) covers L4D2 LAN Kit's independent installer code, LAN Horde Limits plugin, templates, and documentation. The plugin's [source](assets/overlay/left4dead2/addons/sourcemod/scripting/l4d2_lan_horde_limits.sp) carries an MIT SPDX identifier and uses the bundled Left4DHooks API. Third-party components and derivative changes retain their original licenses and credits. MIT does not cover game content or third-party add-ons.
 
 Pinned versions, source URLs, and SHA-256 hashes are recorded in [metadata/dependencies.json](metadata/dependencies.json) and [metadata/bundle.json](metadata/bundle.json). A public repository alone does not grant redistribution rights; see [GitHub's licensing guidance](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository).
 
@@ -22,6 +22,8 @@ Each bundled component retains the full applicable GPL text, corresponding sourc
 
 The bundled `left4dhooks.inc` has wording-only comment edits dated 2026-11-01; executable code, copyright notices, and license notices are unchanged.
 
+The bundled Item Hint source removes an upstream account-specific connection ban. This change is marked 2026-11-08; original authorship and GPL terms are preserved.
+
 ## Downloaded from original publishers
 
 These archives are not mirrored in this repository or its GitHub Releases. Installation downloads pinned originals and preserves their notices.
@@ -37,9 +39,8 @@ These archives are not mirrored in this repository or its GitHub Releases. Insta
 
 ## Excluded from public distribution
 
-- Closed-source ADS 1.1 / `l4d2_weapon_system`: the [author's repository](https://github.com/IA-NanaNana/l4d2-aim-down-sight) provides neither plugin source nor an explicit redistribution license. It is outside the default installation; users may separately import an original author package.
-- [M4A1 SOPMOD 2972592952](https://steamcommunity.com/sharedfiles/filedetails/?id=2972592952), [MW2019 M16 2854899022](https://steamcommunity.com/sharedfiles/filedetails/?id=2854899022), and [Vanilla+ Weapon Sounds 3567477734](https://steamcommunity.com/sharedfiles/filedetails/?id=3567477734): no confirmed redistribution license covers their models, materials, animations, or sounds here. Users obtain originals separately. Credits to multiple sound authors do not replace permission.
-- Private repackaged VPKs, including merged packages, removed conflicting sounds, or modified scope materials and particle events.
+- Closed-source ADS 1.1 / `l4d2_weapon_system`: the [author's repository](https://github.com/IA-NanaNana/l4d2-aim-down-sight) provides neither plugin source nor an explicit redistribution license. This plugin is not installed or redistributed.
+- Weapon models, animations, materials, and replacement sounds, including modified third-party VPKs. No verified redistribution grant covers these optional client add-ons in this project.
 - Game distributions, game DLL/VPK files, third-party Windows client builds, Steam-emulation libraries, account files, credentials, personal settings, private network details, local logs, dumps, and machine-specific test results.
 
 Names and trademarks belong to their respective owners. L4D2 LAN Kit is an independent installation kit, not an official Valve or third-party author product.

@@ -1,2 +1,4 @@
 # Preserve the exact bytes verified by the package manifest.
 * -text
+# This vendor source preserves CRLF endings.
+assets/overlay/left4dead2/addons/sourcemod/scripting/l4d2_item_hint.sp whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

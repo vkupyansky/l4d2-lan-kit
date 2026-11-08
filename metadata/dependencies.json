@@ -91,6 +91,12 @@
   ],
   "BundledComponents": [
     {
+      "Id": "lan-horde-limits",
+      "Version": "1.0.0",
+      "Source": "assets/overlay/left4dead2/addons/sourcemod/scripting/l4d2_lan_horde_limits.sp",
+      "License": "MIT"
+    },
+    {
       "Id": "left4dhooks",
       "Version": "1.174",
       "Repository": "https://github.com/SilvDev/Left4DHooks",
@@ -158,6 +164,7 @@
     "[L4D1/2] Weapon Drop",
     "[L4D & L4D2] Use Priority Patch",
     "[L4D & L4D2] trigger horde notify",
+    "L4D2 LAN Horde Limits",
     "Automatic Campaign Switcher (ACS)",
     "L4D2 Mission Manager",
     "l4d2_changelevel"
