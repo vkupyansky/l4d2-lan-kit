@@ -1,75 +1,77 @@
+[![Русский](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-181717?style=for-the-badge)](README.ru.md)
+
 # L4D2 LAN Kit
 
-Комплект сервера Left 4 Dead 2 для спокойного прохождения по локальной сети: два игрока, два напарника и все 14 официальных кампаний по порядку.
+A Windows server kit for relaxed Left 4 Dead 2 LAN co-op: two players, two survivor companions, and all 14 official campaigns in sequence.
 
-[English](README.en.md) · **[Скачать комплект v0.2.0](https://github.com/vkupyansky/l4d2-lan-kit/releases/download/v0.2.0/L4D2-LAN-Kit-v0.2.0.zip)** · [Все выпуски](https://github.com/vkupyansky/l4d2-lan-kit/releases)
+**[Download v0.2.0](https://github.com/vkupyansky/l4d2-lan-kit/releases/download/v0.2.0/L4D2-LAN-Kit-v0.2.0.zip)** · [All releases](https://github.com/vkupyansky/l4d2-lan-kit/releases)
 
-## Возможности
+## Features
 
-| Компонент | Что делает |
+| Component | What it does |
 | --- | --- |
-| Left4Bots2 + Left4Lib | Помогает напарникам подбирать и передавать предметы, применять дефибрилляторы. Полное автопрохождение выключено. |
-| ACS + Mission Manager + Changelevel | Начинает с No Mercy и переключает все 14 официальных кампаний по кругу, без голосований и пропуска после неудач. |
-| LAN Horde Limits | Применяет профиль орд к поддерживаемым сюжетным событиям, сохраняя боссов и стадии финалов. |
-| Path To Goal | `!ptg` показывает путь, `!ptg_menu` настраивает подсказки. |
-| Item Hint | Shift+E или `!mark` отмечает предмет, противника или место. |
-| Weapon Drop | `!drop` бросает удерживаемое оружие; дополнительное оружие выбрасывать нельзя. |
-| Keep Laser Sights | Необязательный перенос имеющегося лазера при замене оружия. |
-| Who Called the Horde | Показывает, кто вызвал поддерживаемое событие орды. |
+| Left4Bots2 + Left4Lib | Survivor assistance: item pickup, transfers and defibrillators. Full campaign automation is off. |
+| ACS + Mission Manager + Changelevel | Starts with No Mercy and cycles all 14 official campaigns, without voting or skipping after repeated failures. |
+| LAN Horde Limits | Applies the horde profile to supported scripted events while preserving bosses and finale stages. |
+| Path To Goal | `!ptg` shows a route; `!ptg_menu` adjusts hints. |
+| Item Hint | Shift+E or `!mark` marks items, enemies or locations. |
+| Weapon Drop | `!drop` drops the held weapon; secondary weapon dropping is blocked. |
+| Keep Laser Sights | Optional transfer of existing lasers when swapping guns. |
+| Who Called the Horde | Names the player triggering supported horde events. |
 
-Профиль `casual`: Easy, 18 обычных заражённых, случайная орда 6–18, крупная орда 30, штатный интервал Easy 120–240 секунд. Коэффициент урона по телу равен 1 вместо штатных для Easy 2: обычные заражённые живучее.
+Profile `casual`: Easy, 18 common infected, regular hordes of 6–18, large hordes of 30, and Easy's 120–240-second interval. Body-shot damage factor is 1 instead of Easy's 2, making common infected tougher.
 
-LAN Horde Limits через Left4DHooks 1.174 ограничивает поддерживаемые положительные значения `DirectorOptions`. Минимальный и максимальный таймеры сюжетных волн не опускаются ниже 6/10 секунд. Отсутствующие, нулевые и отрицательные значения, боссы, специальные заражённые и стадии финалов сохраняются.
+LAN Horde Limits uses Left4DHooks 1.174 to cap supported positive `DirectorOptions` values and set scripted spawn timer floors to 6/10 seconds. Missing, zero and negative values, bosses, special infected and finale stages remain unchanged.
 
-## Установка и запуск
+## Install and run
 
-Нужны Windows 10/11 x64, Windows PowerShell 5.1, частная локальная сеть, интернет и примерно 10 ГБ для серверных файлов. Игроки отдельно устанавливают совпадающие Steam-версии игры. На Mac можно использовать CrossOver.
+Requires Windows 10/11 x64, Windows PowerShell 5.1, a Private LAN, internet, and roughly 10 GB of server space. Players install matching Steam game versions separately. Mac clients can use CrossOver.
 
-1. Скачайте комплект по ссылке выше и распакуйте ZIP.
-2. Откройте **Install.cmd** и подтвердите запрос администратора. Установщик скачает официальный сервер через SteamCMD и закреплённые зависимости, настроит ограниченное правило брандмауэра и задание для ручного запуска.
-3. Откройте **Start.cmd**. Сама установка игровую сессию не запускает.
-4. На каждом игровом компьютере введите в консоли игры `connect <локальный-IP-сервера>:27016`.
+1. Download the kit above and extract the ZIP.
+2. Open **Install.cmd** and approve administrator access. It downloads the official server through SteamCMD and pinned dependencies, then configures a restricted firewall rule and a manual scheduled task.
+3. Open **Start.cmd**. Installation does not start a session.
+4. In each game's developer console, enter `connect <server-LAN-IP>:27016`.
 
-ZIP содержит установщик, исходники и настройки. Большие игровые и серверные файлы скачиваются при установке и нужны для дальнейшей работы. При первой установке создаётся `kit.config.json` из [config.example.json](config.example.json): папка сервера, адрес, порт, название и стартовая глава. Единственный адрес частной сети определяется автоматически; иначе задайте `ListenIPv4`.
+The ZIP contains setup files, sources and configuration. Large game/server files are downloaded during installation and remain necessary. First installation creates `kit.config.json` from [config.example.json](config.example.json): server folder, address, port, hostname and starting chapter. One Private LAN address is selected automatically; otherwise set `ListenIPv4`.
 
-## Использование
+## Usage
 
-- **Start.cmd** запускает сервер, **Stop.cmd** останавливает текущую сессию.
-- **Check.cmd** без изменений проверяет обязательные плагины, инициализацию настроек/напарников и новые ошибки.
-- Пустой сервер ждёт первого игрока, затем начинает инициализацию раунда.
+- **Start.cmd** starts the server; **Stop.cmd** ends the current session.
+- **Check.cmd** checks required plugins, configuration/bot initialization and fresh errors without changes.
+- An empty server waits for its first player before initializing the round.
 
-Сервер работает под LOCAL SERVICE: закрытие терминала или удалённого рабочего стола его не останавливает. Автозапуска Windows и RCON нет. Повторная установка сохраняет настройки и останавливается при конфликте неизвестных файлов.
+The server runs under LOCAL SERVICE after terminals or remote desktop close. Boot autostart and RCON are disabled. Reinstallation preserves settings and refuses conflicting unknown files.
 
-Перед изменением настроек остановите сервер. `<ServerRoot>/left4dead2/cfg/server.cfg` переопределяет профиль; ограничения локальной сети, выключенных читов и RCON сохраняются. `StartMap` в `kit.config.json` задаёт стартовую главу следующего запуска.
+Stop before editing gameplay settings. `<ServerRoot>/left4dead2/cfg/server.cfg` overrides profile defaults; LAN-only, cheats-off and RCON-off guards remain enforced. `StartMap` in `kit.config.json` selects the next starting chapter.
 
-Keep Laser Sights по умолчанию выключен. `"EnableKeepLaser": true` включает загрузку и компиляцию [авторского исходника](https://forums.alliedmods.net/attachment.php?attachmentid=200229&d=1681243413). При HTTP 403 сохраните его как `runtime/downloads/l4d2_keeplasers.sp` и повторите Install.cmd: SHA проверяется. Left4Bots2/Left4Lib также скачиваются у авторов.
+Keep Laser Sights is off by default. Set `"EnableKeepLaser": true` to download and compile its [official source](https://forums.alliedmods.net/attachment.php?attachmentid=200229&d=1681243413). On HTTP 403, save it as `runtime/downloads/l4d2_keeplasers.sp` and rerun Install.cmd; SHA is checked. Left4Bots2/Left4Lib also download from their authors.
 
-Если напарники перестали следовать, отправьте в игровой чат по очереди, без `!`:
+If companions stop following, send these messages in game chat, without `!`:
 
 ```text
 bots cancel all
 bots follow
 ```
 
-## Проверки
+## Checks
 
 ```powershell
 .\Test.cmd
 ```
 
-Изолированные проверки охватывают конфигурацию, целостность комплекта и восстановление установки. Они не заменяют новую игровую сессию.
+Isolated checks cover configuration, package integrity and installation recovery. They do not replace a new gameplay session.
 
-## Ограничения
+## Limitations
 
-Серверные моды работают с обычными клиентами. Модели оружия и звуки устанавливаются отдельно на клиентах и в комплект не входят. Weapon System ADS не устанавливается. Постепенного открытия карт и автосохранения глав/экипировки нет: после перезапуска используется `StartMap`.
+Server mods work with unmodified clients. Weapon models and replacement sounds are separate client add-ons and are not included. Weapon System ADS is not installed. Progressive map unlocking and automatic chapter/equipment saves are unavailable; restart uses `StartMap`.
 
-В Windows PowerShell 5.1 проверены 57 изолированных сценариев, установка и переустановка с сохранением настроек, запуск, повторный запуск, Check, остановка, перезапуск и ответ по LAN. Официальный кэш проверен SteamCMD. Установка на чистую ОС и новая сессия двух клиентов пока не подтверждены.
+Verified on Windows PowerShell 5.1: 57 isolated checks, installation/reinstallation preserving settings, start, repeated start, Check, stop, restart and LAN response. Official cached content was validated by SteamCMD. Clean-OS installation and a new two-client session remain unverified.
 
-## Документация
+## Documentation
 
-- [Шаблон конфигурации](config.example.json).
-- [Версии, источники и SHA-256 зависимостей](metadata/dependencies.json), [состав комплекта](metadata/bundle.json).
+- [Configuration template](config.example.json).
+- [Dependency versions, sources and SHA-256](metadata/dependencies.json), [package manifest](metadata/bundle.json).
 
-## Лицензия
+## License
 
-Собственный установщик, LAN Horde Limits, шаблоны и документация распространяются по [MIT](LICENSE). Сторонние компоненты сохраняют свои условия; состав, авторство, GPL-исходники и исключения описаны в [THIRD_PARTY.md](THIRD_PARTY.md). Игровые файлы лицензируются отдельно.
+The independent installer, LAN Horde Limits, templates and documentation use [MIT](LICENSE). Third-party components keep their own terms; authorship, GPL sources and distribution exclusions are documented in [THIRD_PARTY.md](THIRD_PARTY.md). Game files are licensed separately.
